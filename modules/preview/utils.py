@@ -1,5 +1,4 @@
 import os
-import logging
 
 from PIL import (
     Image,
@@ -8,17 +7,6 @@ from PIL import (
     ImageFilter,
     ImageOps,
 )
-
-logger = logging.getLogger(__name__)
-
-# Proje kök dizinini, BU DOSYANIN KONUMUNA göre hesapla.
-# modules/preview/utils.py -> proje kökü (iki üst dizin)
-# Böylece bot hangi dizinden çalıştırılırsa çalıştırılsın path bozulmaz.
-_BASE_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..")
-)
-
-_FONTS_DIR = os.path.join(_BASE_DIR, "assets", "fonts")
 
 
 # --------------------------------------------------------
@@ -32,17 +20,17 @@ def load_font(
 
     fonts = [
 
-        os.path.join(
-            _FONTS_DIR,
-            "Roboto-Bold.ttf" if bold else "Roboto-Regular.ttf",
-        ),
-
-        # Sistemde kurulu olabilecek Unicode/Türkçe destekli yedek fontlar
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        "assets/fonts/Roboto-Bold.ttf"
         if bold
-        else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        else "assets/fonts/Roboto-Regular.ttf",
 
-        "arialbd.ttf" if bold else "arial.ttf",
+        "Roboto-Bold.ttf"
+        if bold
+        else "Roboto-Regular.ttf",
+
+        "arialbd.ttf"
+        if bold
+        else "arial.ttf",
 
     ]
 
@@ -52,17 +40,12 @@ def load_font(
 
             return ImageFont.truetype(
                 font,
-                size,
+                size
             )
 
-        except Exception as e:
+        except:
 
-            logger.warning(f"Font yuklenemedi: {font} ({e})")
-
-    logger.error(
-        "Hicbir TrueType font yuklenemedi, Pillow varsayilan bitmap "
-        "fontuna dusuldu -- Turkce karakterler BOZUK gorunecek!"
-    )
+            pass
 
     return ImageFont.load_default()
 

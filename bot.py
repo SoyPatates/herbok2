@@ -1,5 +1,10 @@
 import discord
 from discord.ext import commands
+from modules.preview import PreviewGenerator
+from PIL import Image
+
+import io
+import aiohttp
 
 from modules.config import (
     DISCORD_TOKEN,
@@ -193,6 +198,49 @@ class HerbokologBot(commands.Bot):
         )
     # --------------------------------------------------
 
+    async def generate_preview(self, message):
+
+        attachments = [
+            a for a in message.attachments
+            if a.content_type and a.content_type.startswith("image")
+        ]
+
+        if not attachments:
+            await self.send_response(
+                message,
+                "❌ Lütfen bir thumbnail görseli gönder."
+            )
+            return
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(attachments[0].url) as resp:
+                data = await resp.read()
+
+        thumbnail = Image.open(io.BytesIO(data)).convert("RGB")
+
+        generator = PreviewGenerator(
+            thumbnail=thumbnail,
+            title="Video Başlığı",
+            channel=message.author.display_name,
+            duration="12:48",
+        )
+
+        image = generator.render()
+
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        buffer.seek(0)
+
+        await message.reply(
+            file=discord.File(
+                buffer,
+                filename="preview.png",
+            ),
+            mention_author=False,
+        )
+
+    # --------------------------------------------------
+
     async def process_image(self, message, attachments=None):
         
         if attachments is None:
@@ -285,11 +333,17 @@ class HerbokologBot(commands.Bot):
 
                 if message.attachments:
 
-                    await self.process_image(message)
+                    text = message.content.lower()
+                    if (
+                        "önizleme" in text
+                        or "preview" in text
+                        or "mockup" in text
+                    ):
+                        await self.generate_preview(message)
 
                 else:
 
-                    text = message.content.lower()
+                    await self.process_image(message)
 
                     thumbnail_keywords = [
                         "incele",
