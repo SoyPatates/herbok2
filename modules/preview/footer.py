@@ -1,66 +1,79 @@
 from .theme import Theme
-from .layout import FooterLayout
+from .layout import Layout
 
 
 class Footer:
 
-    def __init__(
-        self,
-        draw,
-        fonts,
-    ):
-
+    def __init__(self, draw, fonts):
         self.draw = draw
         self.fonts = fonts
 
-    # --------------------------------------------------
-
     def render(self):
 
-        self._left()
+        rect = Layout.FOOTER
 
-        self._right()
-
-    # --------------------------------------------------
-
-    def _left(self):
-
-        self.draw.text(
-            (
-                FooterLayout.TEXT_X,
-                FooterLayout.TEXT_Y,
-            ),
-            "SoyTasarım • Ön İzleme Motoru",
-            fill=Theme.TEXT_MUTED,
-            font=self.fonts["tiny"],
+        self.draw.rounded_rectangle(
+            (rect.x, rect.y, rect.right, rect.bottom),
+            radius=14,
+            fill=Theme.SURFACE,
+            outline=Theme.BORDER,
+            width=1,
         )
 
-    # --------------------------------------------------
+        star_size = 20
+        star_x = rect.x + 20
+        star_y = rect.y + rect.height / 2 - star_size / 2
 
-    def _right(self):
+        self._draw_star(star_x, star_y, star_size)
 
-        text = "v2.0"
+        text_x = star_x + star_size + 16
+        # Star ile TAM ayni dikey merkez -- once buradaki -10 kaymasi
+        # metni yukari itip yildizla hizasini bozuyordu.
+        text_y = rect.y + rect.height / 2
+
+        self.draw.text(
+            (text_x, text_y),
+            "Profesyonel önizlemeler, daha güçlü içerikler. ",
+            font=self.fonts["small"],
+            fill=Theme.TEXT_SECONDARY,
+            anchor="lm",
+        )
 
         bbox = self.draw.textbbox(
-            (0, 0),
-            text,
-            font=self.fonts["tiny"],
-        )
-
-        width = bbox[2] - bbox[0]
-
-        x = (
-            1920
-            - 48
-            - width
+            (text_x, text_y),
+            "Profesyonel önizlemeler, daha güçlü içerikler. ",
+            font=self.fonts["small"],
+            anchor="lm",
         )
 
         self.draw.text(
-            (
-                x,
-                FooterLayout.TEXT_Y,
-            ),
-            text,
-            fill=Theme.TEXT_MUTED,
-            font=self.fonts["tiny"],
+            (bbox[2], text_y),
+            "SoyTasarım",
+            font=self.fonts["small_bold"],
+            fill=Theme.YOUTUBE_RED,
+            anchor="lm",
         )
+
+    def _draw_star(self, x, y, size):
+
+        cx = x + size / 2
+        cy = y + size / 2
+        r = size / 2
+
+        points = []
+
+        import math
+
+        for i in range(10):
+
+            angle = math.pi / 2 + i * math.pi / 5
+            radius = r if i % 2 == 0 else r * 0.45
+
+            points.append(
+                (
+                    cx + radius * math.cos(angle),
+                    cy - radius * math.sin(angle),
+                )
+            )
+
+        self.draw.polygon(points, fill=Theme.YOUTUBE_RED)

@@ -1,52 +1,46 @@
 from .theme import Theme
 from .layout import Layout, HeaderLayout
-from .widgets import BadgeWidget
 
 
 class Header:
 
-    def __init__(
-        self,
-        draw,
-        fonts,
-    ):
-
+    def __init__(self, draw, fonts):
         self.draw = draw
         self.fonts = fonts
 
-        self.badge = BadgeWidget(draw)
-
-    # --------------------------------------------------
-
     def render(self):
 
-        self._accent()
-
+        self._logo()
         self._brand()
-
-        self._title()
-
+        self._divider_dot()
+        self._headline()
         self._subtitle()
-
-        self._badge()
-
-        self._divider()
+        self._bottom_divider()
 
     # --------------------------------------------------
 
-    def _accent(self):
+    def _logo(self):
 
-        x = Layout.HEADER.x
+        size = HeaderLayout.LOGO_SIZE
 
         self.draw.rounded_rectangle(
             (
-                x,
-                Layout.HEADER.y + 8,
-                x + 8,
-                Layout.HEADER.bottom - 8,
+                HeaderLayout.LOGO_X,
+                HeaderLayout.LOGO_Y,
+                HeaderLayout.LOGO_X + size,
+                HeaderLayout.LOGO_Y + size,
             ),
-            radius=4,
-            fill=Theme.GREEN,
+            radius=14,
+            fill=Theme.YOUTUBE_RED,
+        )
+
+        self.draw.polygon(
+            [
+                (HeaderLayout.LOGO_X + size * 0.38, HeaderLayout.LOGO_Y + size * 0.28),
+                (HeaderLayout.LOGO_X + size * 0.38, HeaderLayout.LOGO_Y + size * 0.72),
+                (HeaderLayout.LOGO_X + size * 0.74, HeaderLayout.LOGO_Y + size * 0.5),
+            ],
+            fill="white",
         )
 
     # --------------------------------------------------
@@ -54,12 +48,45 @@ class Header:
     def _brand(self):
 
         self.draw.text(
-            (
-                HeaderLayout.TITLE_X,
-                HeaderLayout.TITLE_Y,
-            ),
-            "SoyTasarım",
-            font=self.fonts["title"],
+            (HeaderLayout.TITLE_X, HeaderLayout.TITLE_Y),
+            "Soy",
+            font=self.fonts["brand"],
+            fill=Theme.TEXT,
+        )
+
+        bbox = self.draw.textbbox(
+            (HeaderLayout.TITLE_X, HeaderLayout.TITLE_Y),
+            "Soy",
+            font=self.fonts["brand"],
+        )
+
+        self.draw.text(
+            (bbox[2], HeaderLayout.TITLE_Y),
+            "Tasarım",
+            font=self.fonts["brand"],
+            fill=Theme.YOUTUBE_RED,
+        )
+
+    # --------------------------------------------------
+
+    def _divider_dot(self):
+
+        x = HeaderLayout.DIVIDER_X
+
+        self.draw.line(
+            (x, Layout.HEADER.y + 4, x, Layout.HEADER.y + HeaderLayout.LOGO_SIZE - 4),
+            fill=Theme.BORDER_LIGHT,
+            width=2,
+        )
+
+    # --------------------------------------------------
+
+    def _headline(self):
+
+        self.draw.text(
+            (HeaderLayout.HEADLINE_X, HeaderLayout.HEADLINE_Y),
+            "YouTube Önizleme Raporu",
+            font=self.fonts["headline"],
             fill=Theme.TEXT,
         )
 
@@ -68,84 +95,20 @@ class Header:
     def _subtitle(self):
 
         self.draw.text(
-            (
-                HeaderLayout.SUBTITLE_X,
-                HeaderLayout.SUBTITLE_Y,
-            ),
-            "Video Kapak Ön İzleme",
+            (HeaderLayout.SUBTITLE_X, HeaderLayout.SUBTITLE_Y),
+            "Küçük boyutlarda videonuzun nasıl göründüğünü görün",
             font=self.fonts["small"],
             fill=Theme.TEXT_SECONDARY,
         )
 
     # --------------------------------------------------
 
-    def _title(self):
-
-        text = "YouTube"
-
-        bbox = self.draw.textbbox(
-            (0, 0),
-            "SoyTasarım",
-            font=self.fonts["title"],
-        )
-
-        x = bbox[2] + 34
-        y = HeaderLayout.TITLE_Y
-
-        self.draw.text(
-            (
-                x,
-                y,
-            ),
-            text,
-            font=self.fonts["title"],
-            fill=Theme.YOUTUBE_RED,
-        )
-
-    # --------------------------------------------------
-
-    def _badge(self):
-
-        text = "PNG • 1920×1080"
-
-        bbox = self.draw.textbbox(
-            (0, 0),
-            text,
-            font=self.fonts["tiny"],
-        )
-
-        width = bbox[2] - bbox[0]
-
-        x = (
-            Layout.HEADER.right
-            - width
-            - 44
-        )
-
-        y = Layout.HEADER.y + 18
-
-        self.badge.draw_badge(
-            x,
-            y,
-            text,
-            self.fonts["tiny"],
-            bg=Theme.SURFACE_LIGHT,
-            color=Theme.TEXT,
-        )
-
-    # --------------------------------------------------
-
-    def _divider(self):
+    def _bottom_divider(self):
 
         y = Layout.HEADER.bottom + 12
 
         self.draw.line(
-            (
-                Layout.CONTENT.x,
-                y,
-                Layout.SIDEBAR.right,
-                y,
-            ),
+            (Layout.CONTENT.x, y, Layout.SIDEBAR.right, y),
             fill=Theme.BORDER,
             width=1,
         )

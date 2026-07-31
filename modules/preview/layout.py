@@ -17,213 +17,189 @@ class Rect:
         return self.y + self.height
 
 
+class Thumbnail:
+
+    RADIUS = 14
+    DURATION_MARGIN = 10
+
+
+class Title:
+
+    LINE_SPACING = 6
+
+
 class Layout:
 
     WIDTH = 1920
     HEIGHT = 1080
 
-    PADDING = 48
-    GAP = 42
+    PADDING = 44
+    GAP = 24
 
-    HEADER_HEIGHT = 130
-    FOOTER_HEIGHT = 36
+    HEADER_HEIGHT = 108
 
-    SIDEBAR_WIDTH = 430
-
-    CONTENT_WIDTH = (
-        WIDTH
-        - SIDEBAR_WIDTH
-        - PADDING * 3
-        - 24
-    )
+    SIDEBAR_WIDTH = 400
 
     HEADER = Rect(
         PADDING,
-        28,
+        36,
         WIDTH - PADDING * 2,
         HEADER_HEIGHT,
     )
 
+    CONTENT_TOP = HEADER.bottom + 26
+
+    FOOTER_HEIGHT = 58
+
     FOOTER = Rect(
         PADDING,
-        HEIGHT - 48,
-        WIDTH - PADDING * 2,
+        HEIGHT - FOOTER_HEIGHT - 24,
+        WIDTH - SIDEBAR_WIDTH - PADDING * 2 - 24,
         FOOTER_HEIGHT,
     )
 
+    CONTENT_BOTTOM = FOOTER.y - 20
+
     SIDEBAR = Rect(
         WIDTH - SIDEBAR_WIDTH - PADDING,
-        HEADER.bottom + 28,
+        CONTENT_TOP,
         SIDEBAR_WIDTH,
-        HEIGHT - HEADER.bottom - 76,
+        HEIGHT - CONTENT_TOP - 24,
     )
 
     CONTENT = Rect(
         PADDING,
-        HEADER.bottom + 28,
-        CONTENT_WIDTH,
-        HEIGHT - HEADER.bottom - 76,
+        CONTENT_TOP,
+        SIDEBAR.x - PADDING - 24,
+        CONTENT_BOTTOM - CONTENT_TOP,
     )
 
 
-class HomePage:
+class HeaderLayout:
 
-    AREA = Rect(
-        Layout.CONTENT.x,
-        Layout.CONTENT.y,
-        Layout.CONTENT.width,
-        590,
-    )
+    LOGO_SIZE = 56
 
-    LABEL_Y = AREA.y
+    LOGO_X = Layout.HEADER.x
+    LOGO_Y = Layout.HEADER.y + 2
 
-    THUMBNAIL = Rect(
-        AREA.x,
-        AREA.y + 28,
-        AREA.width,
-        470,
-    )
+    TITLE_X = LOGO_X + LOGO_SIZE + 22
+    TITLE_Y = Layout.HEADER.y
 
-    AVATAR_X = THUMBNAIL.x
+    DIVIDER_X = TITLE_X + 250
 
-    AVATAR_Y = THUMBNAIL.bottom + 20
+    HEADLINE_X = DIVIDER_X + 24
+    HEADLINE_Y = Layout.HEADER.y + 4
 
-    TITLE_X = AVATAR_X + 66
-
-    TITLE_Y = AVATAR_Y
-
-    CHANNEL_X = TITLE_X
-
-    CHANNEL_Y = TITLE_Y + 42
-
-    META_X = TITLE_X
-
-    META_Y = CHANNEL_Y + 30
+    SUBTITLE_X = HEADLINE_X
+    SUBTITLE_Y = HEADLINE_Y + 40
 
 
-class SmallCards:
+class RowsLayout:
 
-    TOP = HomePage.THUMBNAIL.bottom + 150
+    COUNT = 3
+    GAP = Layout.GAP
 
-    WIDTH = (
-        Layout.CONTENT.width - Layout.GAP
-    ) // 2
+    ROW_HEIGHT = (
+        Layout.CONTENT.height - GAP * (COUNT - 1)
+    ) // COUNT
 
-    HEIGHT = 250
+    PADDING = 26
 
-    LEFT = Rect(
-        Layout.CONTENT.x,
-        TOP,
-        WIDTH,
-        HEIGHT,
-    )
+    ICON_SIZE = 56
 
-    RIGHT = Rect(
-        LEFT.right + Layout.GAP,
-        TOP,
-        WIDTH,
-        HEIGHT,
-    )
+    LEFT_WIDTH = 310
 
-    THUMB_HEIGHT = 180
+    THUMB_HEIGHT = ROW_HEIGHT - PADDING * 2
+    THUMB_WIDTH = round(THUMB_HEIGHT * 16 / 9)
 
-    AVATAR_SIZE = 42
+    INFO_GAP = 28
 
-    TITLE_OFFSET = 14
+    # Gercek YouTube thumbnail boyutlari (piksel). Buyuk ekrandaki
+    # ilk boyut referans alinir, digerleri bu orana gore kuculur --
+    # boylece 3 satir da GERCEKTEN farkli buyuklukte gorunur.
+    ROWS = [
+        {
+            "icon": "home",
+            "label": "ANA SAYFA",
+            "size_label": "360 × 205",
+            "real_size": (360, 205),
+            "description": "Videonuzun YouTube ana sayfasındaki görünümü.",
+        },
+        {
+            "icon": "monitor",
+            "label": "KÜÇÜK ANA SAYFA",
+            "size_label": "240 × 135",
+            "real_size": (240, 135),
+            "description": "Ana sayfada daha küçük görünen hâli.",
+        },
+        {
+            "icon": "play",
+            "label": "ÖNERİLEN VİDEOLAR",
+            "size_label": "168 × 94",
+            "real_size": (168, 94),
+            "description": "Önerilen videolar listesinde görünen hâli.",
+        },
+    ]
 
-    META_OFFSET = 60
+    # İlk satırın thumbnail genişliği bu değere sabitlenir, diğer
+    # satırlar real_size oranına göre buna göre küçülür.
+    BASE_THUMB_WIDTH = THUMB_WIDTH
+
+    @staticmethod
+    def thumb_size(index):
+
+        real_w, real_h = RowsLayout.ROWS[index]["real_size"]
+
+        base_real_w = RowsLayout.ROWS[0]["real_size"][0]
+
+        scale = RowsLayout.BASE_THUMB_WIDTH / base_real_w
+
+        return (
+            round(real_w * scale),
+            round(real_h * scale),
+        )
+
+    @staticmethod
+    def row_rect(index):
+
+        y = (
+            Layout.CONTENT.y
+            + index * (RowsLayout.ROW_HEIGHT + RowsLayout.GAP)
+        )
+
+        return Rect(
+            Layout.CONTENT.x,
+            y,
+            Layout.CONTENT.width,
+            RowsLayout.ROW_HEIGHT,
+        )
 
 
 class SidebarLayout:
 
     PADDING = 26
 
-    TITLE_Y = Layout.SIDEBAR.y + 24
+    LOGO_SIZE = 44
 
-    DIVIDER_Y = TITLE_Y + 54
+    LOGO_X = Layout.SIDEBAR.x + PADDING
+    LOGO_Y = Layout.SIDEBAR.y + PADDING
 
-    SECTION_GAP = 34
-
-    BAR_WIDTH = 290
-
-    BAR_HEIGHT = 12
-
-    ITEM_GAP = 92
-
-
-class HeaderLayout:
-
-    TITLE_X = Layout.HEADER.x + 28
-
-    TITLE_Y = Layout.HEADER.y + 12
+    TITLE_X = LOGO_X + LOGO_SIZE + 16
+    TITLE_Y = LOGO_Y - 2
 
     SUBTITLE_X = TITLE_X
+    SUBTITLE_Y = TITLE_Y + 32
 
-    SUBTITLE_Y = TITLE_Y + 42
+    SECTION_START_Y = LOGO_Y + LOGO_SIZE + 30
 
-    BADGE_HEIGHT = 34
+    SECTION_GAP = 30
 
-    BADGE_PADDING = 14
+    ITEM_GAP = 38
+
+    BAR_WIDTH = Layout.SIDEBAR.width - PADDING * 2
+    BAR_HEIGHT = 8
 
 
 class FooterLayout:
 
-    TEXT_X = Layout.FOOTER.x
-
-    TEXT_Y = Layout.FOOTER.y
-
-
-class Thumbnail:
-
-    RADIUS = 16
-
-    DURATION_PADDING = 8
-
-    DURATION_MARGIN = 12
-
-    BORDER_WIDTH = 1
-
-
-class Avatar:
-
-    SIZE = 48
-
-    BORDER = 2
-
-
-class Title:
-
-    MAX_LINES = 2
-
-    LINE_SPACING = 6
-
-    MAX_WIDTH = 700
-
-
-class Channel:
-
-    VERIFIED_SIZE = 15
-
-    VERIFIED_MARGIN = 8
-
-
-class Meta:
-
-    OFFSET = 28
-
-    BULLET_MARGIN = 12
-
-
-class Progress:
-
-    WIDTH = 300
-
-    HEIGHT = 12
-
-    RADIUS = 6
-
-    TITLE_MARGIN = 18
-
-    STATUS_MARGIN = 22
-
-    ITEM_GAP = 82
+    ICON_SIZE = 34

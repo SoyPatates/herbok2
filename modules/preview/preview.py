@@ -1,10 +1,10 @@
-from PIL import Image
+from PIL import Image, ImageDraw
 
-from .canvas import Canvas
 from .theme import Theme
+from .layout import Layout
 
 from .header import Header
-from .cards import Cards
+from .rows import Rows
 from .sidebar import Sidebar
 from .footer import Footer
 
@@ -33,17 +33,25 @@ class PreviewGenerator:
         self.channel = channel
         self.duration = duration
 
-        self.canvas = Canvas()
+        self.image = Image.new(
+            "RGB",
+            (Layout.WIDTH, Layout.HEIGHT),
+            Theme.BACKGROUND,
+        )
 
-        self.image = self.canvas.get_image()
-        self.draw = self.canvas.get_draw()
+        self.draw = ImageDraw.Draw(self.image)
 
         self.fonts = {
-            "title": load_font(56, bold=True),
-            "subtitle": load_font(28),
-            "text": load_font(34, bold=True),
-            "small": load_font(26),
-            "tiny": load_font(22),
+            "brand": load_font(34, bold=True),
+            "headline": load_font(28, bold=True),
+            "sidebar_brand": load_font(26, bold=True),
+            "section_title": load_font(20, bold=True),
+            "row_label": load_font(26, bold=True),
+            "card_title": load_font(28, bold=True),
+            "value": load_font(24, bold=True),
+            "small": load_font(19),
+            "small_bold": load_font(19, bold=True),
+            "tiny": load_font(17),
         }
 
     # --------------------------------------------------
@@ -55,37 +63,20 @@ class PreviewGenerator:
         else:
             image = self.thumbnail.convert("RGB")
 
-        return crop_thumbnail(
-            image,
-            (1280, 720),
-        )
+        return crop_thumbnail(image, (1280, 720))
 
     # --------------------------------------------------
 
     def _prepare_avatar(self):
 
         if self.avatar is None:
-
-            avatar = Image.new(
-                "RGB",
-                (256, 256),
-                Theme.SURFACE_LIGHT,
-            )
-
+            avatar = Image.new("RGB", (256, 256), Theme.SURFACE_LIGHT)
         elif isinstance(self.avatar, str):
-
-            avatar = Image.open(
-                self.avatar
-            ).convert("RGB")
-
+            avatar = Image.open(self.avatar).convert("RGB")
         else:
-
             avatar = self.avatar.convert("RGB")
 
-        return circle_avatar(
-            avatar,
-            128,
-        )
+        return circle_avatar(avatar, 128)
 
     # --------------------------------------------------
 
@@ -94,12 +85,9 @@ class PreviewGenerator:
         thumbnail = self._prepare_thumbnail()
         avatar = self._prepare_avatar()
 
-        Header(
-            self.draw,
-            self.fonts,
-        ).render()
+        Header(self.draw, self.fonts).render()
 
-        Cards(
+        Rows(
             canvas=self.image,
             draw=self.draw,
             fonts=self.fonts,
@@ -110,32 +98,18 @@ class PreviewGenerator:
             duration=self.duration,
         ).render()
 
-        Sidebar(
-            self.draw,
-            self.fonts,
-        ).render()
+        Sidebar(self.draw, self.fonts).render()
 
-        Footer(
-            self.draw,
-            self.fonts,
-        ).render()
+        Footer(self.draw, self.fonts).render()
 
         return self.image
 
     # --------------------------------------------------
 
-    def save(
-        self,
-        output="preview.png",
-    ):
+    def save(self, output="preview.png"):
 
         image = self.render()
-
-        image.save(
-            output,
-            quality=100,
-        )
-
+        image.save(output, quality=100)
         return output
 
     # --------------------------------------------------
