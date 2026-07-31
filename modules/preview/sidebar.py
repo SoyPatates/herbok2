@@ -8,10 +8,17 @@ from .widgets import DividerWidget
 
 class Sidebar:
 
-    def __init__(self, draw, fonts):
+    def __init__(self, draw, fonts, seed=None):
 
         self.draw = draw
         self.fonts = fonts
+
+        # Ayni tasarim (ayni gorsel + baslik) her zaman AYNI analiz
+        # sonucunu versin -- farkli tasarimlar farkli analiz alsin.
+        # Bunun icin global 'random' yerine bu seed'e bagli ayri bir
+        # rastgele uretici kullaniyoruz.
+        self.rng = random.Random(seed)
+
         self.divider = DividerWidget(draw)
 
     # --------------------------------------------------
@@ -189,10 +196,10 @@ class Sidebar:
 
         y = self._section_title(x, y, "ANALİZLER")
 
-        chosen = random.sample(self.METRIC_POOL, k=3)
+        chosen = self.rng.sample(self.METRIC_POOL, k=3)
 
         scores = [
-            (label, random.randint(58, 98))
+            (label, self.rng.randint(58, 98))
             for label in chosen
         ]
 
@@ -297,8 +304,8 @@ class Sidebar:
 
         self.divider.draw_divider(x, y - 18, SidebarLayout.BAR_WIDTH)
 
-        wrapped = "Daha iyi tasarımlar, daha fazla etkileşim.\nSoyTasarım ile fark yaratın!"
-
+        wrapped = "Bot geliştirilme aşamasındadır. \nSoyTasarım"
+git status
         self.draw.multiline_text(
             (x, y),
             wrapped,
