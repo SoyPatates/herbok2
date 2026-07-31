@@ -85,6 +85,46 @@ class HerbokologBot(commands.Bot):
 
     # --------------------------------------------------
 
+    @staticmethod
+    def _image_attachments(attachments):
+
+        return [
+            a for a in attachments
+            if a.content_type and a.content_type.startswith("image")
+        ]
+
+    # --------------------------------------------------
+
+    async def resolve_attachments(self, message):
+        """
+        Mesajin kendi ekleri varsa onlari kullanir. Yoksa, mesaj bir
+        reply ise (gecmis bir gorsele @herbokolog yazarak cevap
+        verilmisse) o orijinal mesajin eklerini bulup doner.
+        """
+
+        own = self._image_attachments(message.attachments)
+
+        if own:
+            return own
+
+        if message.reference is None:
+            return []
+
+        replied = message.reference.resolved
+
+        if replied is None or isinstance(replied, discord.DeletedReferencedMessage):
+
+            try:
+                replied = await message.channel.fetch_message(
+                    message.reference.message_id
+                )
+            except (discord.NotFound, discord.HTTPException):
+                return []
+
+        return self._image_attachments(replied.attachments)
+
+    # --------------------------------------------------
+
     async def process_text(self, message):
 
         prompt = self.clean_prompt(message)
@@ -198,17 +238,13 @@ class HerbokologBot(commands.Bot):
         )
     # --------------------------------------------------
 
-    async def generate_preview(self, message):
-
-        attachments = [
-            a for a in message.attachments
-            if a.content_type and a.content_type.startswith("image")
-        ]
+    async def generate_preview(self, message, attachments):
 
         if not attachments:
             await self.send_response(
                 message,
-                "❌ Lütfen bir thumbnail görseli gönder."
+                "❌ Lütfen bir thumbnail görseli gönder (ya da görselli bir mesaja "
+                "cevap verip beni etiketle).",
             )
             return
 
@@ -241,21 +277,14 @@ class HerbokologBot(commands.Bot):
 
     # --------------------------------------------------
 
-    async def process_image(self, message, attachments=None):
-        
-        if attachments is None:
-            attachments = [
-                a for a in message.attachments
-                if a.content_type and a.content_type.startswith("image")
-            ]
+    async def process_image(self, message, attachments):
 
-            # Sadece yeni yüklenen resimleri kaydet
-            self.last_thumbnail[message.channel.id] = attachments
         if not attachments:
 
             await self.send_response(
                 message,
-                "❌ Lütfen en az bir resim gönder.",
+                "❌ Lütfen en az bir resim gönder (ya da görselli bir mesaja "
+                "cevap verip beni etiketle).",
             )
             return
 
@@ -331,19 +360,30 @@ class HerbokologBot(commands.Bot):
 
             try:
 
-                if message.attachments:
+                text = message.content.lower()
 
-                    text = message.content.lower()
+                # Ya mesajin kendi eki, ya da (ek yoksa) reply attigi
+                # gecmis mesajin eki kullanilir.
+                attachments = await self.resolve_attachments(message)
+
+                if attachments:
+
+                    # Yeni/kullanilan gorseli hafizaya al ki sonraki
+                    # "incele/geliştir" gibi takip mesajlarinda
+                    # tekrar kullanilabilsin.
+                    self.last_thumbnail[message.channel.id] = attachments
+
                     if (
                         "önizleme" in text
                         or "preview" in text
                         or "mockup" in text
                     ):
-                        await self.generate_preview(message)
+                        await self.generate_preview(message, attachments)
+
+                    else:
+                        await self.process_image(message, attachments)
 
                 else:
-
-                    await self.process_image(message)
 
                     thumbnail_keywords = [
                         "incele",
@@ -364,13 +404,12 @@ class HerbokologBot(commands.Bot):
                         any(keyword in text for keyword in thumbnail_keywords)
                         and message.channel.id in self.last_thumbnail
                     ):
-                
 
                         await self.process_image(
                             message,
                             attachments=self.last_thumbnail[
                                 message.channel.id
-                            ]
+                            ],
                         )
 
                     else:
@@ -383,7 +422,7 @@ class HerbokologBot(commands.Bot):
                     message,
                     e,
                 )
-                
+
 bot = HerbokologBot()
 
 if __name__ == "__main__":
