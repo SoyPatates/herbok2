@@ -216,9 +216,35 @@ class Rows:
             max_lines=2,
         )
 
-        # Baslik her zaman satirin ustune hizali kalsin, thumbnail
-        # kucuk olsa bile (dikey ortada) metin bloklari sabit dursun.
-        title_y = rect.y + RowsLayout.PADDING
+        line_bbox = self.draw.textbbox((0, 0), "Ag", font=title_font)
+        line_h = line_bbox[3] - line_bbox[1]
+        line_count = wrapped.count("\n") + 1
+
+        channel_font = self.fonts["small"]
+        channel_bbox = self.draw.textbbox((0, 0), "Ag", font=channel_font)
+        channel_line_h = channel_bbox[3] - channel_bbox[1]
+
+        # Baslik + kanal + meta bloğunun toplam yuksekligini onceden
+        # hesapla, boylece thumbnail ile AYNI dikey eksende (satirin
+        # ortasinda) hizalanabilir -- kucuk thumbnail'lerde metin
+        # tepede kalip video ortada durarak "hizasiz" gorunmesin.
+        title_block_h = (
+            line_count * line_h
+            + (line_count - 1) * Title.LINE_SPACING
+        )
+
+        gap_title_channel = 16
+        gap_channel_meta = 14
+
+        info_total_h = (
+            title_block_h
+            + gap_title_channel
+            + channel_line_h
+            + gap_channel_meta
+            + channel_line_h
+        )
+
+        title_y = rect.y + (rect.height - info_total_h) // 2
 
         self.draw.multiline_text(
             (info_x, title_y),
@@ -228,13 +254,7 @@ class Rows:
             spacing=Title.LINE_SPACING,
         )
 
-        line_bbox = self.draw.textbbox((0, 0), "Ag", font=title_font)
-        line_h = line_bbox[3] - line_bbox[1]
-        line_count = wrapped.count("\n") + 1
-
-        channel_y = title_y + line_count * (line_h + Title.LINE_SPACING) + 16
-
-        channel_font = self.fonts["small"]
+        channel_y = title_y + title_block_h + gap_title_channel
 
         self.draw.text(
             (info_x, channel_y),
@@ -251,7 +271,7 @@ class Rows:
             size=16,
         )
 
-        meta_y = channel_y + line_h + 14
+        meta_y = channel_y + channel_line_h + gap_channel_meta
 
         self.draw.text(
             (info_x, meta_y),
