@@ -1,3 +1,5 @@
+import hashlib
+
 from PIL import Image, ImageDraw
 
 from .theme import Theme
@@ -46,7 +48,7 @@ class PreviewGenerator:
             "headline": load_font(28, bold=True),
             "sidebar_brand": load_font(26, bold=True),
             "section_title": load_font(20, bold=True),
-            "row_label": load_font(26, bold=True),
+            "row_label": load_font(22, bold=True),
             "card_title": load_font(28, bold=True),
             "value": load_font(24, bold=True),
             "small": load_font(19),
@@ -80,6 +82,21 @@ class PreviewGenerator:
 
     # --------------------------------------------------
 
+    def _analysis_seed(self, thumbnail):
+
+        # Ayni gorsel + ayni baslik = ayni seed = ayni analiz sonucu.
+        # Farkli bir video/tasarim icin thumbnail baytlari veya
+        # baslik degistigi an seed de degisir, analiz de degisir.
+        hasher = hashlib.md5()
+
+        hasher.update(thumbnail.tobytes())
+        hasher.update(self.title.encode("utf-8"))
+        hasher.update(self.channel.encode("utf-8"))
+
+        return int(hasher.hexdigest(), 16) % (2 ** 32)
+
+    # --------------------------------------------------
+
     def render(self):
 
         thumbnail = self._prepare_thumbnail()
@@ -98,7 +115,11 @@ class PreviewGenerator:
             duration=self.duration,
         ).render()
 
-        Sidebar(self.draw, self.fonts).render()
+        Sidebar(
+            self.draw,
+            self.fonts,
+            seed=self._analysis_seed(thumbnail),
+        ).render()
 
         Footer(self.draw, self.fonts).render()
 

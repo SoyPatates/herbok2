@@ -206,8 +206,16 @@ class VerifiedBadgeWidget:
             fill=Theme.VERIFIED,
         )
 
-        self.draw.text(
-            (x + size * 0.25, y - 1),
-            "✓",
-            fill="white",
-        )
+        # "✓" karakterini font olmadan cizmek bulanik/kucuk cikiyordu.
+        # Bunun yerine net gorunen bir vektor tik isareti ciziyoruz.
+        cx = x + size / 2
+        cy = y + size / 2
+
+        p1 = (cx - size * 0.24, cy + size * 0.02)
+        p2 = (cx - size * 0.06, cy + size * 0.20)
+        p3 = (cx + size * 0.26, cy - size * 0.20)
+
+        width = max(2, round(size * 0.14))
+
+        self.draw.line([p1, p2], fill="white", width=width, joint="curve")
+        self.draw.line([p2, p3], fill="white", width=width, joint="curve")

@@ -49,7 +49,7 @@ class Rows:
 
             self._draw_row_card(rect)
             self._draw_left(rect, spec)
-            self._draw_right(rect, thumb_size)
+            self._draw_right(rect, thumb_size, spec)
 
     # --------------------------------------------------
 
@@ -178,7 +178,7 @@ class Rows:
 
     # --------------------------------------------------
 
-    def _draw_right(self, rect, thumb_size):
+    def _draw_right(self, rect, thumb_size, spec):
 
         thumb_w, thumb_h = thumb_size
 
@@ -210,7 +210,7 @@ class Rows:
 
         wrapped = fit_text(
             self.draw,
-            self.title,
+            spec["card_title"],
             title_font,
             info_width,
             max_lines=2,

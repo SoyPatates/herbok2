@@ -107,7 +107,7 @@ class RowsLayout:
 
     ICON_SIZE = 56
 
-    LEFT_WIDTH = 310
+    LEFT_WIDTH = 340
 
     THUMB_HEIGHT = ROW_HEIGHT - PADDING * 2
     THUMB_WIDTH = round(THUMB_HEIGHT * 16 / 9)
@@ -124,6 +124,7 @@ class RowsLayout:
             "size_label": "360 × 205",
             "real_size": (360, 205),
             "description": "Videonuzun YouTube ana sayfasındaki görünümü.",
+            "card_title": "Video Kapak Fotoğrafınız Anasayfada Böyle Gözükecek",
         },
         {
             "icon": "monitor",
@@ -131,6 +132,7 @@ class RowsLayout:
             "size_label": "240 × 135",
             "real_size": (240, 135),
             "description": "Ana sayfada daha küçük görünen hâli.",
+            "card_title": "Video Kapak Fotoğrafınız Küçük Anasayfada Böyle Gözükecek",
         },
         {
             "icon": "play",
@@ -138,6 +140,7 @@ class RowsLayout:
             "size_label": "168 × 94",
             "real_size": (168, 94),
             "description": "Önerilen videolar listesinde görünen hâli.",
+            "card_title": "Video Kapak Fotoğrafınız Önerilen Videolarda Böyle Gözükecek",
         },
     ]
 
