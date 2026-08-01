@@ -9,6 +9,8 @@ import aiohttp
 from modules.config import (
     DISCORD_TOKEN,
     MAX_HISTORY,
+    TASARIM_KANALI,
+    SOHBET_KANALLARI,
 )
 
 from modules.memory import MemoryManager
@@ -68,6 +70,19 @@ class HerbokologBot(commands.Bot):
         called = "herbokolog" in content
 
         return mentioned or called
+
+    # --------------------------------------------------
+
+    def is_design_channel(self, message):
+        """
+        Sadece TASARIM_KANALI'nda katı thumbnail analiz sistemi
+        (mod tespiti, puanlama, önizleme vb.) calisir. Diger her
+        kanal (SOHBET_KANALLARI dahil, hatta listede olmayan bir
+        kanal olsa bile) "sohbet" kanali sayilir ve gorsellere
+        normal/dogal bir tepki verilir.
+        """
+
+        return message.channel.id == TASARIM_KANALI
 
     # --------------------------------------------------
 
@@ -322,6 +337,47 @@ class HerbokologBot(commands.Bot):
         )
     # --------------------------------------------------
 
+    async def process_image_casual(self, message, attachments):
+        """
+        Tasarim odasi disindaki (sohbet) kanallarda gorsel atildiginda
+        calisir. Thumbnail kriterleri/puanlama YOK -- bot sadece kendi
+        normal kisiligiyle (BASE_PROMPT) gorsele dogal bir tepki verir.
+        """
+
+        user_text = self.clean_prompt(message)
+
+        if not user_text:
+            user_text = (
+                "Biri sana bir görsel gönderdi. Discord'da bir "
+                "arkadaşın tepki verir gibi, doğal ve kısa bir "
+                "tepki ver. Teknik/tasarım analizi yapma, puan verme."
+            )
+
+        response = self.ai.analyze_image_with_context(
+            attachments[0].url,
+            BASE_PROMPT,
+            user_text,
+        )
+
+        self.memory.add(
+            message.channel.id,
+            message.author.display_name,
+            "[görsel gönderdi] " + user_text,
+        )
+
+        self.memory.add(
+            message.channel.id,
+            "Herbokolog",
+            response,
+        )
+
+        await self.send_response(
+            message,
+            response,
+        )
+
+    # --------------------------------------------------
+
     async def send_response(
         self,
         message,
@@ -366,24 +422,34 @@ class HerbokologBot(commands.Bot):
                 # gecmis mesajin eki kullanilir.
                 attachments = await self.resolve_attachments(message)
 
+                design_channel = self.is_design_channel(message)
+
                 if attachments:
 
-                    # Yeni/kullanilan gorseli hafizaya al ki sonraki
-                    # "incele/geliştir" gibi takip mesajlarinda
-                    # tekrar kullanilabilsin.
-                    self.last_thumbnail[message.channel.id] = attachments
+                    if design_channel:
 
-                    if (
-                        "önizleme" in text
-                        or "preview" in text
-                        or "mockup" in text
-                    ):
-                        await self.generate_preview(message, attachments)
+                        # Yeni/kullanilan gorseli hafizaya al ki sonraki
+                        # "incele/geliştir" gibi takip mesajlarinda
+                        # tekrar kullanilabilsin.
+                        self.last_thumbnail[message.channel.id] = attachments
+
+                        if (
+                            "önizleme" in text
+                            or "preview" in text
+                            or "mockup" in text
+                        ):
+                            await self.generate_preview(message, attachments)
+
+                        else:
+                            await self.process_image(message, attachments)
 
                     else:
-                        await self.process_image(message, attachments)
 
-                else:
+                        # Tasarim odasi disinda: katı analiz yok,
+                        # botun normal kisiligiyle dogal bir tepki.
+                        await self.process_image_casual(message, attachments)
+
+                elif design_channel:
 
                     thumbnail_keywords = [
                         "incele",
@@ -415,6 +481,11 @@ class HerbokologBot(commands.Bot):
                     else:
 
                         await self.process_text(message)
+
+                else:
+
+                    # Sohbet kanalinda ek yok -> normal sohbet.
+                    await self.process_text(message)
 
             except Exception as e:
 

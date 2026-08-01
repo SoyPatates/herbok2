@@ -91,6 +91,49 @@ class AIClient:
 
     # -----------------------------------------------------
 
+    def analyze_image_with_context(
+        self,
+        image_url: str,
+        system_prompt: str,
+        user_text: str,
+    ) -> str:
+        """
+        analyze_image_url gibi ama bir sistem prompt'u (orn. BASE_PROMPT)
+        ile birlikte gonderir. Tasarim odasi disindaki kanallarda, gorsele
+        normal/dogal bir tepki verirken kullanilir -- katı thumbnail
+        kriterleri degil, botun genel kisiligi devreye girer.
+        """
+
+        messages = [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": user_text,
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_url,
+                        },
+                    },
+                ],
+            },
+        ]
+
+        return self.chat(
+            messages=messages,
+            model=VISION_MODEL,
+            timeout=60,
+        )
+
+    # -----------------------------------------------------
+
     def extract_profile_info(
         self,
         text: str,
