@@ -4,6 +4,7 @@ from modules.preview import PreviewGenerator
 from PIL import Image
 
 import io
+import re
 import aiohttp
 
 from modules.config import (
@@ -96,6 +97,16 @@ class HerbokologBot(commands.Bot):
                 self.user.mention,
                 ""
             )
+
+        # Duz yazilan "herbokolog" kelimesini de temizle -- yoksa bu
+        # kelime modele giden metnin icinde kalip, model kendi adini
+        # kullanicinin mesaji sanip kafasi karisiyor.
+        prompt = re.sub(
+            r"herbokolog",
+            "",
+            prompt,
+            flags=re.IGNORECASE,
+        )
 
         return prompt.strip()
 
