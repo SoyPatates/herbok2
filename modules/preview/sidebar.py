@@ -304,8 +304,8 @@ class Sidebar:
 
         self.divider.draw_divider(x, y - 18, SidebarLayout.BAR_WIDTH)
 
-        wrapped = "Bot geliştirilme aşamasındadır. \nSoyTasarım"
-git status
+        wrapped = "Daha iyi tasarımlar, daha fazla etkileşim.\nSoyTasarım ile fark yaratın!"
+
         self.draw.multiline_text(
             (x, y),
             wrapped,
