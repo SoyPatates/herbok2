@@ -26,6 +26,7 @@ from modules.openrouter_manager import AllKeysExhaustedError
 from modules.prompts import (
     BASE_PROMPT,
     MEMORY_EXTRACTION_PROMPT,
+    CASUAL_IMAGE_PROMPT,
 
 )
 
@@ -355,7 +356,7 @@ class HerbokologBot(commands.Bot):
 
         response = self.ai.analyze_image_with_context(
             attachments[0].url,
-            BASE_PROMPT,
+            CASUAL_IMAGE_PROMPT,
             user_text,
         )
 

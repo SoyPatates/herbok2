@@ -98,23 +98,24 @@ class AIClient:
         user_text: str,
     ) -> str:
         """
-        analyze_image_url gibi ama bir sistem prompt'u (orn. BASE_PROMPT)
-        ile birlikte gonderir. Tasarim odasi disindaki kanallarda, gorsele
-        normal/dogal bir tepki verirken kullanilir -- katı thumbnail
-        kriterleri degil, botun genel kisiligi devreye girer.
+        analyze_image_url ile ayni calisan yapiyi kullanir (TEK user
+        mesaji, ayri bir system rolu YOK). Bazi ucretsiz vision
+        modelleri ayri bir system mesaji + gorsel kombinasyonunda
+        gorseli yok sayip sadece system prompt'a gore cevap
+        uretebiliyor -- bu yuzden hepsini tek metne birlestiriyoruz.
         """
 
+        combined_text = system_prompt.format(user_text=user_text) \
+            if "{user_text}" in system_prompt else \
+            f"{system_prompt}\n\nKullanıcının mesajı: {user_text}"
+
         messages = [
-            {
-                "role": "system",
-                "content": system_prompt,
-            },
             {
                 "role": "user",
                 "content": [
                     {
                         "type": "text",
-                        "text": user_text,
+                        "text": combined_text,
                     },
                     {
                         "type": "image_url",
