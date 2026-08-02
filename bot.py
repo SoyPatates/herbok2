@@ -3,7 +3,6 @@ from discord.ext import commands
 from modules.preview import PreviewGenerator
 from PIL import Image
 
-import asyncio
 import io
 import re
 import aiohttp
@@ -236,6 +235,89 @@ class HerbokologBot(commands.Bot):
             prompt,
         )
 
+        extracted = self.ai.extract_profile_info(
+            prompt,
+            MEMORY_EXTRACTION_PROMPT,
+        )
+
+        for interest in extracted["interests"]:
+            self.profile.add_interest(
+                user_id,
+                interest,
+            )
+
+        for project in extracted["projects"]:
+            self.profile.add_project(
+                user_id,
+                project,
+            )
+
+        for preference in extracted["preferences"]:
+            self.profile.add_preference(
+                user_id,
+                preference,
+            )
+
+        for fact in extracted["facts"]:
+            self.profile.add_fact(
+                user_id,
+                fact,
+            )
+
+        # Mesajda baska kullanicilar hakkinda soylenen kalici bilgiler
+        # varsa, bunlari ONLARIN kendi profiline kaydet -- boylece bot
+        # sadece kendisiyle konusan kisiyi degil, hakkinda konusulan
+        # herkesi de zamanla "taniyabilir".
+        #
+        # GUVENLIK: bu SADECE guvenilir kullanicilardan (TRUSTED_USER_IDS)
+        # gelen mesajlarda calisir. Yoksa herhangi biri baskasi hakkinda
+        # asilsiz/kotu niyetli bir "bilgi" soyleyip onu kalici hafizaya
+        # yazdirabilir. Guvenilir olmayan biri baskasindan bahsettiginde
+        # bot o mesaja o an normal cevap verir ama hicbir sey kaydetmez.
+        if message.author.id in TRUSTED_USER_IDS:
+
+            for u in extraction_targets:
+
+                target_prompt = TARGET_MEMORY_EXTRACTION_PROMPT.replace(
+                    "{target_name}",
+                    u.display_name,
+                )
+
+                target_extracted = self.ai.extract_profile_info(
+                    prompt,
+                    target_prompt,
+                )
+
+                logger.info(
+                    "target extraction (%s) -> %s",
+                    u.display_name,
+                    target_extracted,
+                )
+
+                for interest in target_extracted["interests"]:
+                    self.profile.add_interest(
+                        u.id,
+                        interest,
+                    )
+
+                for project in target_extracted["projects"]:
+                    self.profile.add_project(
+                        u.id,
+                        project,
+                    )
+
+                for preference in target_extracted["preferences"]:
+                    self.profile.add_preference(
+                        u.id,
+                        preference,
+                    )
+
+                for fact in target_extracted["facts"]:
+                    self.profile.add_fact(
+                        u.id,
+                        fact,
+                    )
+
         history = self.memory.history_text(
             message.channel.id
         )
@@ -351,101 +433,6 @@ class HerbokologBot(commands.Bot):
             message,
             response,
         )
-
-        # Hafiza CIKARIMI (kendi hakkinda + baskalari hakkinda) burada,
-        # cevap zaten gonderildikten SONRA, arka planda calisir. Bu iki
-        # ekstra AI cagrisi kullanicinin cevabi gormesini geciktirmesin
-        # diye boyle ayirdik -- kayit biraz gecikmeli olur ama kullanici
-        # bunu beklemek zorunda kalmaz.
-        asyncio.create_task(
-            self._extract_and_store_memory(
-                prompt=prompt,
-                user_id=user_id,
-                is_trusted=message.author.id in TRUSTED_USER_IDS,
-                extraction_targets=extraction_targets,
-            )
-        )
-
-    # --------------------------------------------------
-
-    async def _extract_and_store_memory(
-        self,
-        prompt,
-        user_id,
-        is_trusted,
-        extraction_targets,
-    ):
-        """
-        process_text'in arka planda (cevap gonderildikten sonra)
-        calistirdigi hafiza yazma islemi. Burada olusan bir hata
-        kullaniciya gorunmez -- sadece o mesajdan bir sey ogrenilemez,
-        botun kendisi hata vermez.
-        """
-
-        try:
-
-            extracted = self.ai.extract_profile_info(
-                prompt,
-                MEMORY_EXTRACTION_PROMPT,
-            )
-
-            for interest in extracted["interests"]:
-                self.profile.add_interest(user_id, interest)
-
-            for project in extracted["projects"]:
-                self.profile.add_project(user_id, project)
-
-            for preference in extracted["preferences"]:
-                self.profile.add_preference(user_id, preference)
-
-            for fact in extracted["facts"]:
-                self.profile.add_fact(user_id, fact)
-
-            # Mesajda baska kullanicilar hakkinda soylenen kalici
-            # bilgiler varsa, bunlari ONLARIN kendi profiline kaydet.
-            #
-            # GUVENLIK: bu SADECE guvenilir kullanicilardan
-            # (TRUSTED_USER_IDS) gelen mesajlarda calisir. Yoksa
-            # herhangi biri baskasi hakkinda asilsiz/kotu niyetli bir
-            # "bilgi" soyleyip onu kalici hafizaya yazdirabilir.
-            # Guvenilir olmayan biri baskasindan bahsettiginde bot o
-            # mesaja o an normal cevap verir ama hicbir sey kaydetmez.
-            if is_trusted:
-
-                for u in extraction_targets:
-
-                    target_prompt = TARGET_MEMORY_EXTRACTION_PROMPT.replace(
-                        "{target_name}",
-                        u.display_name,
-                    )
-
-                    target_extracted = self.ai.extract_profile_info(
-                        prompt,
-                        target_prompt,
-                    )
-
-                    logger.info(
-                        "target extraction (%s) -> %s",
-                        u.display_name,
-                        target_extracted,
-                    )
-
-                    for interest in target_extracted["interests"]:
-                        self.profile.add_interest(u.id, interest)
-
-                    for project in target_extracted["projects"]:
-                        self.profile.add_project(u.id, project)
-
-                    for preference in target_extracted["preferences"]:
-                        self.profile.add_preference(u.id, preference)
-
-                    for fact in target_extracted["facts"]:
-                        self.profile.add_fact(u.id, fact)
-
-        except Exception as e:
-
-            logger.error("[hafiza cikarimi hatasi]: %s", e)
-
     # --------------------------------------------------
 
     async def generate_preview(self, message, attachments):
