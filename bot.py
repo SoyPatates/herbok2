@@ -12,6 +12,7 @@ from modules.config import (
     MAX_HISTORY,
     TASARIM_KANALI,
     SOHBET_KANALLARI,
+    TRUSTED_USER_IDS,
 )
 
 from modules.memory import MemoryManager
@@ -51,6 +52,7 @@ class HerbokologBot(commands.Bot):
         self.thumbnail = ThumbnailManager()
         self.ai = AIClient()
         self.last_thumbnail = {}
+        self.last_mentioned_user = {}
 
     async def setup_hook(self):
         print("Herbokolog hazırlanıyor...")
@@ -192,6 +194,31 @@ class HerbokologBot(commands.Bot):
                 u.display_name,
             )
 
+        if mentioned_users:
+
+            # Bu mesajda gercekten etiketlenen kisi(ler) varsa, kanal
+            # icin "en son bahsedilen kisi" olarak kaydet -- boylece
+            # bir sonraki takip mesajinda (yeni etiket olmasa bile)
+            # kimden bahsedildigini hatirlayabiliriz.
+            self.last_mentioned_user[message.channel.id] = mentioned_users
+
+        # Hafiza YAZMA (kaydetme) icin hedef kisi listesi. Eger bu
+        # mesajda kimse etiketlenmemisse ama GUVENILIR bir kullanici
+        # konusuyorsa ve kanalda yakin zamanda birinden bahsedilmisse,
+        # "hala o kisiden bahsediliyor" varsayimiyla o kisiyi hedef al.
+        # Boylece "o bilgiyi X olarak guncelle" gibi yeniden etiket
+        # icermeyen takip mesajlari da dogru kisiye kaydolur.
+        extraction_targets = mentioned_users
+
+        if (
+            not extraction_targets
+            and message.author.id in TRUSTED_USER_IDS
+        ):
+            extraction_targets = self.last_mentioned_user.get(
+                message.channel.id,
+                [],
+            )
+
         self.memory.add(
             message.channel.id,
             message.author.display_name,
@@ -231,41 +258,49 @@ class HerbokologBot(commands.Bot):
         # varsa, bunlari ONLARIN kendi profiline kaydet -- boylece bot
         # sadece kendisiyle konusan kisiyi degil, hakkinda konusulan
         # herkesi de zamanla "taniyabilir".
-        for u in mentioned_users:
+        #
+        # GUVENLIK: bu SADECE guvenilir kullanicilardan (TRUSTED_USER_IDS)
+        # gelen mesajlarda calisir. Yoksa herhangi biri baskasi hakkinda
+        # asilsiz/kotu niyetli bir "bilgi" soyleyip onu kalici hafizaya
+        # yazdirabilir. Guvenilir olmayan biri baskasindan bahsettiginde
+        # bot o mesaja o an normal cevap verir ama hicbir sey kaydetmez.
+        if message.author.id in TRUSTED_USER_IDS:
 
-            target_prompt = TARGET_MEMORY_EXTRACTION_PROMPT.replace(
-                "{target_name}",
-                u.display_name,
-            )
+            for u in extraction_targets:
 
-            target_extracted = self.ai.extract_profile_info(
-                prompt,
-                target_prompt,
-            )
-
-            for interest in target_extracted["interests"]:
-                self.profile.add_interest(
-                    u.id,
-                    interest,
+                target_prompt = TARGET_MEMORY_EXTRACTION_PROMPT.replace(
+                    "{target_name}",
+                    u.display_name,
                 )
 
-            for project in target_extracted["projects"]:
-                self.profile.add_project(
-                    u.id,
-                    project,
+                target_extracted = self.ai.extract_profile_info(
+                    prompt,
+                    target_prompt,
                 )
 
-            for preference in target_extracted["preferences"]:
-                self.profile.add_preference(
-                    u.id,
-                    preference,
-                )
+                for interest in target_extracted["interests"]:
+                    self.profile.add_interest(
+                        u.id,
+                        interest,
+                    )
 
-            for fact in target_extracted["facts"]:
-                self.profile.add_fact(
-                    u.id,
-                    fact,
-                )
+                for project in target_extracted["projects"]:
+                    self.profile.add_project(
+                        u.id,
+                        project,
+                    )
+
+                for preference in target_extracted["preferences"]:
+                    self.profile.add_preference(
+                        u.id,
+                        preference,
+                    )
+
+                for fact in target_extracted["facts"]:
+                    self.profile.add_fact(
+                        u.id,
+                        fact,
+                    )
 
         history = self.memory.history_text(
             message.channel.id
