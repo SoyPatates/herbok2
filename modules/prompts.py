@@ -941,12 +941,21 @@ Kurallar:
 - Mesaj "{target_name}" hakkında somut/kalıcı bir bilgi içermiyorsa
   (sadece bir yorum, hakaret, şaka, anlık bir tepki gibi bir şeyse)
   boş listeler döndür. Her mesajdan zorla bir şey çıkarma.
+- ÇOK ÖNEMLİ: Bir mesaj hem somut/kalıcı bir bilgi HEM DE bir hakaret/
+  yorum içerebilir aynı anda. Böyle durumda mesajın TAMAMINI reddetme
+  — sadece hakaret/yorum kısmını atla, somut/kalıcı kısmı (rol, geçmiş,
+  meslek, üyelik durumu gibi) yine de çıkar.
+  Örnek: "X eski üye, tasarımcı değil, ayrıca kabaydı" mesajında
+  "kabaydı" kısmı anlık bir tepki/yorumdur, atla — ama "eski üye" ve
+  "tasarımcı değil" kalıcı bilgilerdir, bunları facts olarak al.
 - Tahmin yapma, uydurma.
 - Sadece açıkça söylenen şeyleri yaz.
 - Kısa yaz.
 - Aynı bilgiyi farklı şekilde tekrar etme.
 - Geçici/anlık bir durumu (o an sinirliydi, o an mutluydu gibi)
   "fact" olarak kaydetme — sadece kalıcı/uzun vadeli bilgileri al.
+  Ama "eski üye", "belirli bir rolü var/yok" gibi ifadeler geçici
+  değil, kalıcı bilgidir — bunları AL.
 
 JSON dışında hiçbir şey yazma.
 
