@@ -24,6 +24,7 @@ from modules.thumbnail import (
 
 from modules.ai import AIClient
 from modules.openrouter_manager import AllKeysExhaustedError
+from modules.logger import logger
 
 from modules.prompts import (
     BASE_PROMPT,
@@ -219,6 +220,15 @@ class HerbokologBot(commands.Bot):
                 [],
             )
 
+        logger.debug(
+            "process_text: author=%s (trusted=%s) mentioned=%s "
+            "extraction_targets=%s",
+            message.author.display_name,
+            message.author.id in TRUSTED_USER_IDS,
+            [u.display_name for u in mentioned_users],
+            [u.display_name for u in extraction_targets],
+        )
+
         self.memory.add(
             message.channel.id,
             message.author.display_name,
@@ -278,6 +288,12 @@ class HerbokologBot(commands.Bot):
                     target_prompt,
                 )
 
+                logger.info(
+                    "target extraction (%s) -> %s",
+                    u.display_name,
+                    target_extracted,
+                )
+
                 for interest in target_extracted["interests"]:
                     self.profile.add_interest(
                         u.id,
@@ -334,6 +350,13 @@ class HerbokologBot(commands.Bot):
 
             mentioned_profile = self.profile.build_profile_prompt(
                 u.id
+            )
+
+            logger.debug(
+                "profile lookup (%s, id=%s) -> %s",
+                u.display_name,
+                u.id,
+                "bulundu" if mentioned_profile else "BOS/yok",
             )
 
             if mentioned_profile:

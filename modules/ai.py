@@ -5,6 +5,7 @@ from modules.config import (
     MAX_OUTPUT_TOKENS,
 )
 from modules.openrouter_manager import manager
+from modules.logger import logger
 
 CHAT_MODEL = "google/gemma-4-26b-a4b-it:free"
 VISION_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
@@ -154,6 +155,8 @@ class AIClient:
             ]
         )
 
+        raw_content = content
+
         content = content.replace("```json", "")
         content = content.replace("```", "")
         content = content.strip()
@@ -161,7 +164,14 @@ class AIClient:
         try:
             data = json.loads(content)
 
-        except Exception:
+        except Exception as e:
+
+            logger.warning(
+                "extract_profile_info: JSON parse basarisiz (%s). "
+                "Ham model cevabi: %r",
+                e,
+                raw_content[:1000],
+            )
 
             return {
                 "interests": [],
@@ -170,12 +180,29 @@ class AIClient:
                 "facts": [],
             }
 
-        return {
+        result = {
             "interests": data.get("interests", []),
             "projects": data.get("projects", []),
             "preferences": data.get("preferences", []),
             "facts": data.get("facts", []),
         }
+
+        total = sum(len(v) for v in result.values())
+
+        if total == 0:
+            logger.debug(
+                "extract_profile_info: model gecerli JSON dondurdu ama "
+                "hicbir kategori dolu degil. Ham cevap: %r",
+                raw_content[:500],
+            )
+        else:
+            logger.info(
+                "extract_profile_info: %d bilgi cikarildi -> %s",
+                total,
+                result,
+            )
+
+        return result
 
     # -----------------------------------------------------
 
