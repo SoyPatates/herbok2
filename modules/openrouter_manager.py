@@ -7,6 +7,7 @@ from openai import (
 )
 
 from modules.config import OPENROUTER_API_KEYS
+from modules.logger import logger
 
 
 class AllKeysExhaustedError(Exception):
@@ -14,6 +15,22 @@ class AllKeysExhaustedError(Exception):
 
     def __init__(self):
         super().__init__("Patates adamın parası bitti")
+
+
+class EmptyModelResponseError(Exception):
+    """
+    Model API'den hata fırlatmadan ama icerik olmadan (choices bos/None)
+    bir cevap dondurdugunde firlatilir. Genelde OpenRouter'daki ucretsiz
+    modellerin o an kapasite/kesinti yasadigi durumlarda olur -- key ile
+    ilgisi yoktur, bu yuzden key rotasyonu bunu cozmez.
+    """
+
+    def __init__(self, model: str = ""):
+        super().__init__(
+            f"Model ({model or 'bilinmeyen'}) boş/geçersiz bir cevap "
+            "döndürdü, muhtemelen o an kapasite sorunu yaşıyor. "
+            "Tekrar denemen gerekebilir."
+        )
 
 
 class OpenRouterManager:
@@ -56,6 +73,7 @@ class OpenRouterManager:
 
     def chat_completions_create(self, **kwargs):
         last_error = None
+        model_name = kwargs.get("model", "")
 
         for i in range(len(self.api_keys)):
             idx = (self.current_index + i) % len(self.api_keys)
@@ -66,6 +84,16 @@ class OpenRouterManager:
                     base_url=self.BASE_URL,
                 )
                 result = client.chat.completions.create(**kwargs)
+
+                if not getattr(result, "choices", None):
+                    logger.warning(
+                        "chat_completions_create: model=%s bos/None "
+                        "choices dondurdu. Ham cevap: %r",
+                        model_name,
+                        result,
+                    )
+                    raise EmptyModelResponseError(model_name)
+
                 self.current_index = idx
                 return result
 
