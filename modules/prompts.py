@@ -876,7 +876,8 @@ Sadece iki görselde gerçekten gördüğün farklara göre karar ver.
 MEMORY_EXTRACTION_PROMPT = """
 Sen Herbokolog'un hafıza yöneticisisin.
 
-Görevin kullanıcı hakkında uzun süre hatırlanması faydalı olacak bilgileri çıkarmaktır.
+Görevin, mesajı yazan kişinin KENDİSİ hakkında uzun süre hatırlanması
+faydalı olacak bilgileri çıkarmaktır.
 
 Sadece aşağıdaki kategorileri kullan:
 
@@ -889,9 +890,21 @@ Kurallar:
 
 - Eğer kaydetmeye değer bilgi yoksa boş listeler döndür.
 - Tahmin yapma.
-- Kullanıcının açıkça söylediği şeyleri yaz.
+- SADECE mesajı yazan kişinin KENDİSİ hakkında, kendi ağzından açıkça
+  söylediği şeyleri yaz ("ben ...", "benim ...", birinci şahıs gibi).
+- ÇOK ÖNEMLİ: Mesaj BAŞKA bir kişiden bahsediyorsa (bir isim geçiyorsa,
+  "o", "bu kişi" gibi üçüncü şahıs kullanılıyorsa, ya da biri hakkında
+  bir şey anlatılıyorsa), o kısmı KESİNLİKLE ALMA — bu, mesajı yazan
+  kişinin kendi bilgisi değildir. Emin değilsen, o bilgiyi atla.
 - Kısa yaz.
 - Aynı bilgiyi farklı şekilde tekrar etme.
+
+Örnek:
+
+Mesaj: "Eltac Azerbaycan'da yaşıyor, uzun süredir çalışıyor"
+
+Bu, mesajı yazan kişi hakkında DEĞİL, "Eltac" adlı başka biri
+hakkındadır — bu yüzden hiçbir şey çıkarma, boş listeler döndür.
 
 JSON dışında hiçbir şey yazma.
 
