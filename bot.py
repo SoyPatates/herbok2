@@ -398,22 +398,7 @@ class HerbokologBot(commands.Bot):
             messages.append(
                 {
                     "role": "system",
-                    "content": (
-                        "Son konuşmalar (bu kanaldaki geçici sohbet "
-                        "akışı, KESİN/DOĞRULANMIŞ bilgi DEĞİLDİR):\n"
-                        + history
-                        + "\n\nÖNEMLİ: Yukarıdaki 'Son konuşmalar' "
-                        "sadece bağlam içindir. Biri hakkında kişisel/"
-                        "hassas bir iddiayı (ilişki geçmişi, para, "
-                        "niyet, karakteri hakkında olumsuz bir şey vb.) "
-                        "SADECE o kişinin PROFİL bloğunda kayıtlı bir "
-                        "bilgiyse veya kişinin KENDİSİ o an açıkça "
-                        "söylemişse gerçekmiş gibi sun. Başka biri o "
-                        "kişi hakkında şaka/iddia/dedikodu olarak bir "
-                        "şey yazmışsa, bunu kesin bilgiymiş gibi asla "
-                        "tekrar etme veya onaylama — PROFİL bloğunda "
-                        "yoksa o konuda net bir şey bilmediğini söyle."
-                    ),
+                    "content": "Son konuşmalar:\n" + history,
                 }
             )
 

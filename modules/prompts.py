@@ -948,6 +948,21 @@ Kurallar:
   Örnek: "X eski üye, tasarımcı değil, ayrıca kabaydı" mesajında
   "kabaydı" kısmı anlık bir tepki/yorumdur, atla — ama "eski üye" ve
   "tasarımcı değil" kalıcı bilgilerdir, bunları facts olarak al.
+- ÇOK ÖNEMLİ — DAVRANIŞ/KARAKTER PATERNİ DE BİLGİDİR: Mesajı yazan kişi
+  "{target_name}" hakkında tekrar eden bir davranışı, alışkanlığı veya
+  karakter özelliğini net ve iddialı bir dille anlatıyorsa (örn.
+  "genelde X'ten bahsetmeyi sever", "hep Y yapmaya çalışır", "Z
+  havası var"), bunu "sadece yorum/hakaret" diye ELEME — bu tür kalıcı
+  davranış paternleri de facts kategorisine girer. SADECE o anki geçici
+  bir duygu tepkisini (o an sinirliydi, o an tatlı davrandı gibi) veya
+  düz bir hakareti (aptal, kaba, çirkin gibi tek kelimelik yorumları)
+  eleme; bir davranış paterni tarif ediliyorsa onu al.
+- ÇOK ÖNEMLİ — AÇIK HAFIZA KOMUTU: Mesajı yazan kişi "hafızana yaz",
+  "bunu unutma", "bunu kaydet", "bunu bil", "aklında olsun" gibi bir
+  ifadeyle bilerek ve açıkça bir bilgiyi kalıcı olarak hatırlamanı
+  istiyorsa, o bilgiyi yukarıdaki filtreleme kurallarını uygulamadan
+  (yorum mu, kalıcı mı diye tartışmadan) doğrudan facts olarak al.
+  Kullanıcı bunu bilerek ve isteyerek söylüyor, karar senin değil.
 - Tahmin yapma, uydurma.
 - Sadece açıkça söylenen şeyleri yaz.
 - Kısa yaz.
