@@ -166,6 +166,31 @@ class HerbokologBot(commands.Bot):
 
         self.profile.update_last_seen(user_id)
 
+        # Mesajda BAŞKA kullanıcılar etiketlenmiş olabilir (botun
+        # kendisi haric). Bunlari once okunakli isme cevirelim ki
+        # model ham "<@id>" yerine gercek ismi gorsun, sonra o
+        # kisi(ler)in KENDI profilini ayri ve net etiketli sekilde
+        # modele verelim -- yoksa model, sadece elinde olan tek
+        # profil bloğu (mesaji yazanin profili) kimden bahsediliyorsa
+        # o sanip kisileri birbirine karistiriyor.
+        mentioned_users = [
+            u for u in message.mentions
+            if u.id != self.user.id
+        ]
+
+        for u in mentioned_users:
+
+            prompt = prompt.replace(
+                u.mention,
+                f"@{u.display_name}",
+            )
+
+            self.profile.ensure_user(
+                u.id,
+                u.name,
+                u.display_name,
+            )
+
         self.memory.add(
             message.channel.id,
             message.author.display_name,
@@ -220,7 +245,53 @@ class HerbokologBot(commands.Bot):
             messages.append(
                 {
                     "role": "system",
-                    "content": profile_prompt,
+                    "content": (
+                        f"SANA YAZAN KİŞİNİN ({message.author.display_name}) "
+                        "PROFİLİ:\n\n" + profile_prompt
+                    ),
+                }
+            )
+
+        # Etiketlenen kisi(ler)in KENDI profilini ayri sistem
+        # mesaji olarak ekle, net sekilde kim oldugunu belirterek.
+        for u in mentioned_users:
+
+            mentioned_profile = self.profile.build_profile_prompt(
+                u.id
+            )
+
+            if mentioned_profile:
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": (
+                            f"MESAJDA BAHSEDİLEN/ETİKETLENEN KİŞİNİN "
+                            f"({u.display_name}) PROFİLİ — bu SANA YAZAN "
+                            f"kişiden FARKLI bir kişidir, karıştırma:\n\n"
+                            + mentioned_profile
+                        ),
+                    }
+                )
+
+        if mentioned_users:
+
+            names = ", ".join(
+                u.display_name for u in mentioned_users
+            )
+
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        f"ÖNEMLİ: Bu mesajda {names} adlı kullanıcı(lar) "
+                        "etiketleniyor/bahsediliyor. Kullanıcı bu kişi(ler) "
+                        "hakkında bir şey soruyorsa, cevabını SADECE bu "
+                        "kişi(ler) hakkında ver. Sana yazan kişiyle "
+                        "karıştırma, onlar farklı kişiler. Aşağıdaki "
+                        "'Son konuşmalar' geçmişinde her satırın başındaki "
+                        "isim o mesajı kimin yazdığını gösterir, ona göre "
+                        "ayır."
+                    ),
                 }
             )
 
