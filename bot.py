@@ -435,6 +435,80 @@ class HerbokologBot(commands.Bot):
         )
     # --------------------------------------------------
 
+    def parse_info_command(self, message):
+        """
+        "@herbokolog bilgi <id>" ya da "@herbokolog bilgi @kullanici"
+        komutunu yakalar. Bu komut normal process_text/AI akisina hic
+        girmez -- DB'deki HAM profili (yorum/filtre olmadan) direkt
+        geri doner. Debug/kontrol amacli, basit bir ek komut.
+
+        Eslesme yoksa None doner.
+        """
+
+        prompt = self.clean_prompt(message)
+
+        match = re.match(
+            r"^bilgi\s+(?:<@!?(\d+)>|(\d+))\s*$",
+            prompt.strip(),
+            flags=re.IGNORECASE,
+        )
+
+        if not match:
+            return None
+
+        return int(match.group(1) or match.group(2))
+
+    # --------------------------------------------------
+
+    async def send_info_command(self, message, user_id):
+
+        profile = self.profile.get_profile(user_id)
+
+        if profile is None:
+            await self.send_response(
+                message,
+                f"❌ `{user_id}` için kayıtlı bir profil yok.",
+            )
+            return
+
+        lines = [
+            f"**Kullanıcı ID:** {profile['user_id']}",
+            f"**Username:** {profile['username']}",
+            f"**Display name:** {profile['display_name']}",
+            f"**Son görülme:** {profile['last_seen']}",
+            "",
+        ]
+
+        def section(title, items):
+            if items:
+                lines.append(f"**{title}:**")
+                for item in items:
+                    lines.append(f"- {item}")
+                lines.append("")
+
+        section("İlgi Alanları", profile["interests"])
+        section("Projeler", profile["projects"])
+        section("Tercihler", profile["preferences"])
+        section("Bilinen Bilgiler (facts)", profile["facts"])
+
+        if not any([
+            profile["interests"],
+            profile["projects"],
+            profile["preferences"],
+            profile["facts"],
+        ]):
+            lines.append("_Hiçbir interest/project/preference/fact kaydı yok._")
+
+        text = "\n".join(lines)
+
+        # Discord tek mesajda 2000 karakter siniri var.
+        if len(text) > 1900:
+            text = text[:1900] + "\n...(kırpıldı)"
+
+        await self.send_response(message, text)
+
+    # --------------------------------------------------
+
     async def generate_preview(self, message, attachments):
 
         if not attachments:
@@ -592,6 +666,20 @@ class HerbokologBot(commands.Bot):
             return
 
         if not self.is_called(message):
+            return
+
+        info_target_id = self.parse_info_command(message)
+
+        if info_target_id is not None:
+
+            if message.author.id not in TRUSTED_USER_IDS:
+                await self.send_response(
+                    message,
+                    "❌ Bu komutu sadece güvenilir kullanıcılar kullanabilir.",
+                )
+                return
+
+            await self.send_info_command(message, info_target_id)
             return
 
         async with message.channel.typing():
