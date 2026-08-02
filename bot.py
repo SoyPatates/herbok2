@@ -40,6 +40,62 @@ intents.message_content = True
 intents.guilds = True
 
 
+class ProfilePagerView(discord.ui.View):
+    """
+    'bilgi <id>' ciktisi birden fazla sayfaya bolunduyunde ekli
+    Onceki/Sonraki butonlari. 3 dakika hareketsizlik sonrasi
+    otomatik devre disi kalir (timeout).
+    """
+
+    def __init__(self, pages, timeout=180):
+
+        super().__init__(timeout=timeout)
+
+        self.pages = pages
+        self.index = 0
+
+        self._update_buttons()
+
+    def _update_buttons(self):
+
+        self.prev_button.disabled = self.index == 0
+        self.next_button.disabled = self.index == len(self.pages) - 1
+
+    def _page_content(self):
+
+        return (
+            self.pages[self.index]
+            + f"\n\n_Sayfa {self.index + 1}/{len(self.pages)}_"
+        )
+
+    @discord.ui.button(label="◀ Önceki", style=discord.ButtonStyle.secondary)
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        self.index = max(0, self.index - 1)
+        self._update_buttons()
+
+        await interaction.response.edit_message(
+            content=self._page_content(),
+            view=self,
+        )
+
+    @discord.ui.button(label="Sonraki ▶", style=discord.ButtonStyle.secondary)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        self.index = min(len(self.pages) - 1, self.index + 1)
+        self._update_buttons()
+
+        await interaction.response.edit_message(
+            content=self._page_content(),
+            view=self,
+        )
+
+    async def on_timeout(self):
+
+        for item in self.children:
+            item.disabled = True
+
+
 class HerbokologBot(commands.Bot):
 
     def __init__(self):
@@ -435,6 +491,41 @@ class HerbokologBot(commands.Bot):
         )
     # --------------------------------------------------
 
+    # Kullanicinin yazdigi kategori isimlerini gercek DB kategorisine
+    # cevirir (Turkce takma adlar dahil).
+    CATEGORY_ALIASES = {
+        "facts": "facts",
+        "fact": "facts",
+        "bilgi": "facts",
+        "bilgiler": "facts",
+        "projects": "projects",
+        "project": "projects",
+        "proje": "projects",
+        "projeler": "projects",
+        "interests": "interests",
+        "interest": "interests",
+        "ilgi": "interests",
+        "ilgialani": "interests",
+        "ilgialanlari": "interests",
+        "preferences": "preferences",
+        "preference": "preferences",
+        "tercih": "preferences",
+        "tercihler": "preferences",
+    }
+
+    CATEGORY_LABELS = {
+        "interests": "İlgi Alanları",
+        "projects": "Projeler",
+        "preferences": "Tercihler",
+        "facts": "Bilinen Bilgiler (facts)",
+    }
+
+    def resolve_category(self, raw):
+
+        return self.CATEGORY_ALIASES.get(raw.strip().lower())
+
+    # --------------------------------------------------
+
     def parse_info_command(self, message):
         """
         "@herbokolog bilgi <id>" ya da "@herbokolog bilgi @kullanici"
@@ -460,9 +551,158 @@ class HerbokologBot(commands.Bot):
 
     # --------------------------------------------------
 
+    def parse_delete_command(self, message):
+        """
+        "@herbokolog sil <id> <kategori> <kayit_id>" komutunu yakalar.
+        Ornek: "sil 604008871274741800 facts 42"
+        Eslesme yoksa None doner, eslesirse
+        (user_id, category, row_id) tuple'i doner.
+        """
+
+        prompt = self.clean_prompt(message)
+
+        match = re.match(
+            r"^sil\s+(?:<@!?(\d+)>|(\d+))\s+(\S+)\s+(\d+)\s*$",
+            prompt.strip(),
+            flags=re.IGNORECASE,
+        )
+
+        if not match:
+            return None
+
+        user_id = int(match.group(1) or match.group(2))
+        category = self.resolve_category(match.group(3))
+        row_id = int(match.group(4))
+
+        return user_id, category, row_id
+
+    # --------------------------------------------------
+
+    def parse_add_command(self, message):
+        """
+        "@herbokolog ekle <id> <kategori> <metin>" komutunu yakalar.
+        Ornek: "ekle 604008871274741800 facts Azerbaycan'da yasiyor"
+        Eslesme yoksa None doner, eslesirse
+        (user_id, category, value) tuple'i doner.
+        """
+
+        prompt = self.clean_prompt(message)
+
+        match = re.match(
+            r"^ekle\s+(?:<@!?(\d+)>|(\d+))\s+(\S+)\s+(.+)$",
+            prompt.strip(),
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+
+        if not match:
+            return None
+
+        user_id = int(match.group(1) or match.group(2))
+        category = self.resolve_category(match.group(3))
+        value = match.group(4).strip()
+
+        return user_id, category, value
+
+    # --------------------------------------------------
+
+    def parse_edit_command(self, message):
+        """
+        "@herbokolog duzenle <id> <kategori> <kayit_id> <yeni metin>"
+        komutunu yakalar.
+        Eslesme yoksa None doner, eslesirse
+        (user_id, category, row_id, new_value) tuple'i doner.
+        """
+
+        prompt = self.clean_prompt(message)
+
+        match = re.match(
+            r"^d[uü]zenle\s+(?:<@!?(\d+)>|(\d+))\s+(\S+)\s+(\d+)\s+(.+)$",
+            prompt.strip(),
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+
+        if not match:
+            return None
+
+        user_id = int(match.group(1) or match.group(2))
+        category = self.resolve_category(match.group(3))
+        row_id = int(match.group(4))
+        new_value = match.group(5).strip()
+
+        return user_id, category, row_id, new_value
+
+    # --------------------------------------------------
+
+    def build_profile_pages(self, profile):
+        """
+        get_profile_detailed() ciktisindan, her satiri gercek DB
+        id'siyle birlikte gosteren, sayfalara bolunmus metin listesi
+        uretir. Her sayfa Discord'un 2000 karakter sinirinin altinda
+        kalacak sekilde bolunur.
+        """
+
+        header_lines = [
+            f"**Kullanıcı ID:** {profile['user_id']}",
+            f"**Username:** {profile['username']}",
+            f"**Display name:** {profile['display_name']}",
+            f"**Son görülme:** {profile['last_seen']}",
+            "",
+        ]
+
+        body_lines = []
+
+        has_any = False
+
+        for category in ("interests", "projects", "preferences", "facts"):
+
+            entries = profile[category]
+
+            if not entries:
+                continue
+
+            has_any = True
+
+            body_lines.append(f"**{self.CATEGORY_LABELS[category]}:**")
+
+            for row_id, value in entries:
+                body_lines.append(f"`[{row_id}]` {value}")
+
+            body_lines.append("")
+
+        if not has_any:
+            body_lines.append(
+                "_Hiçbir interest/project/preference/fact kaydı yok._"
+            )
+
+        # Sayfalara bol: her sayfa header + kadar-siga-o-kadar body
+        # satiri, 1800 karaktere kadar (guvenlik payi birakiyoruz).
+        pages = []
+
+        current = list(header_lines)
+        current_len = sum(len(l) + 1 for l in current)
+
+        for line in body_lines:
+
+            line_len = len(line) + 1
+
+            if current_len + line_len > 1800 and len(current) > len(header_lines):
+
+                pages.append("\n".join(current))
+                current = list(header_lines)
+                current_len = sum(len(l) + 1 for l in current)
+
+            current.append(line)
+            current_len += line_len
+
+        pages.append("\n".join(current))
+
+        return pages
+
+    # --------------------------------------------------
+
     async def send_info_command(self, message, user_id):
 
-        profile = self.profile.get_profile(user_id)
+        profile = self.profile.get_profile_detailed(user_id)
 
         if profile is None:
             await self.send_response(
@@ -471,41 +711,108 @@ class HerbokologBot(commands.Bot):
             )
             return
 
-        lines = [
-            f"**Kullanıcı ID:** {profile['user_id']}",
-            f"**Username:** {profile['username']}",
-            f"**Display name:** {profile['display_name']}",
-            f"**Son görülme:** {profile['last_seen']}",
-            "",
-        ]
+        pages = self.build_profile_pages(profile)
 
-        def section(title, items):
-            if items:
-                lines.append(f"**{title}:**")
-                for item in items:
-                    lines.append(f"- {item}")
-                lines.append("")
+        if len(pages) == 1:
+            await self.send_response(message, pages[0])
+            return
 
-        section("İlgi Alanları", profile["interests"])
-        section("Projeler", profile["projects"])
-        section("Tercihler", profile["preferences"])
-        section("Bilinen Bilgiler (facts)", profile["facts"])
+        view = ProfilePagerView(pages)
 
-        if not any([
-            profile["interests"],
-            profile["projects"],
-            profile["preferences"],
-            profile["facts"],
-        ]):
-            lines.append("_Hiçbir interest/project/preference/fact kaydı yok._")
+        await message.reply(
+            pages[0] + f"\n\n_Sayfa 1/{len(pages)}_",
+            view=view,
+            mention_author=False,
+        )
 
-        text = "\n".join(lines)
+    # --------------------------------------------------
 
-        # Discord tek mesajda 2000 karakter siniri var.
-        if len(text) > 1900:
-            text = text[:1900] + "\n...(kırpıldı)"
+    async def send_delete_command(self, message, user_id, category, row_id):
 
-        await self.send_response(message, text)
+        if category is None:
+            await self.send_response(
+                message,
+                "❌ Geçersiz kategori. Kullanılabilir: "
+                "facts, projects, interests, preferences "
+                "(bilgi, proje, ilgi, tercih de olur).",
+            )
+            return
+
+        deleted = self.profile.delete_entry(category, row_id, user_id)
+
+        if deleted:
+            await self.send_response(
+                message,
+                f"✅ Silindi: `{category}` kategorisinden `[{row_id}]` "
+                f"numaralı kayıt (kullanıcı `{user_id}`).",
+            )
+        else:
+            await self.send_response(
+                message,
+                f"❌ `[{row_id}]` numaralı kayıt `{category}` "
+                f"kategorisinde ve `{user_id}` kullanıcısında bulunamadı.",
+            )
+
+    # --------------------------------------------------
+
+    async def send_add_command(self, message, user_id, category, value):
+
+        if category is None:
+            await self.send_response(
+                message,
+                "❌ Geçersiz kategori. Kullanılabilir: "
+                "facts, projects, interests, preferences "
+                "(bilgi, proje, ilgi, tercih de olur).",
+            )
+            return
+
+        if not value:
+            await self.send_response(
+                message,
+                "❌ Eklenecek metin boş olamaz.",
+            )
+            return
+
+        self.profile.ensure_user(user_id, str(user_id), str(user_id))
+        self.profile.add_entry(category, user_id, value)
+
+        await self.send_response(
+            message,
+            f"✅ Eklendi: `{category}` kategorisine (kullanıcı `{user_id}`)\n"
+            f"> {value}",
+        )
+
+    # --------------------------------------------------
+
+    async def send_edit_command(
+        self, message, user_id, category, row_id, new_value,
+    ):
+
+        if category is None:
+            await self.send_response(
+                message,
+                "❌ Geçersiz kategori. Kullanılabilir: "
+                "facts, projects, interests, preferences "
+                "(bilgi, proje, ilgi, tercih de olur).",
+            )
+            return
+
+        updated = self.profile.update_entry(
+            category, row_id, user_id, new_value,
+        )
+
+        if updated:
+            await self.send_response(
+                message,
+                f"✅ Güncellendi: `{category}` `[{row_id}]`\n"
+                f"> {new_value}",
+            )
+        else:
+            await self.send_response(
+                message,
+                f"❌ `[{row_id}]` numaralı kayıt `{category}` "
+                f"kategorisinde ve `{user_id}` kullanıcısında bulunamadı.",
+            )
 
     # --------------------------------------------------
 
@@ -680,6 +987,48 @@ class HerbokologBot(commands.Bot):
                 return
 
             await self.send_info_command(message, info_target_id)
+            return
+
+        delete_args = self.parse_delete_command(message)
+
+        if delete_args is not None:
+
+            if message.author.id not in TRUSTED_USER_IDS:
+                await self.send_response(
+                    message,
+                    "❌ Bu komutu sadece güvenilir kullanıcılar kullanabilir.",
+                )
+                return
+
+            await self.send_delete_command(message, *delete_args)
+            return
+
+        add_args = self.parse_add_command(message)
+
+        if add_args is not None:
+
+            if message.author.id not in TRUSTED_USER_IDS:
+                await self.send_response(
+                    message,
+                    "❌ Bu komutu sadece güvenilir kullanıcılar kullanabilir.",
+                )
+                return
+
+            await self.send_add_command(message, *add_args)
+            return
+
+        edit_args = self.parse_edit_command(message)
+
+        if edit_args is not None:
+
+            if message.author.id not in TRUSTED_USER_IDS:
+                await self.send_response(
+                    message,
+                    "❌ Bu komutu sadece güvenilir kullanıcılar kullanabilir.",
+                )
+                return
+
+            await self.send_edit_command(message, *edit_args)
             return
 
         async with message.channel.typing():
