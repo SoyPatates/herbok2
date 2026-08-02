@@ -96,7 +96,7 @@ class Header:
 
         self.draw.text(
             (HeaderLayout.SUBTITLE_X, HeaderLayout.SUBTITLE_Y),
-            "Küçük boyutlarda videonuzun nasıl göründüğünü görün",
+            "Tasarımınızın YouTube videolarında nasıl görüneceğini görün",
             font=self.fonts["small"],
             fill=Theme.TEXT_SECONDARY,
         )

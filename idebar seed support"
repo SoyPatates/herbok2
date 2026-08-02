@@ -1,0 +1,47 @@
+[1mdiff --git a/modules/preview/sidebar.py b/modules/preview/sidebar.py[m
+[1mindex 6373c92..36a17c4 100644[m
+[1m--- a/modules/preview/sidebar.py[m
+[1m+++ b/modules/preview/sidebar.py[m
+[36m@@ -8,10 +8,17 @@[m [mfrom .widgets import DividerWidget[m
+ [m
+ class Sidebar:[m
+ [m
+[31m-    def __init__(self, draw, fonts):[m
+[32m+[m[32m    def __init__(self, draw, fonts, seed=None):[m
+ [m
+         self.draw = draw[m
+         self.fonts = fonts[m
+[32m+[m
+[32m+[m[32m        # Ayni tasarim (ayni gorsel + baslik) her zaman AYNI analiz[m
+[32m+[m[32m        # sonucunu versin -- farkli tasarimlar farkli analiz alsin.[m
+[32m+[m[32m        # Bunun icin global 'random' yerine bu seed'e bagli ayri bir[m
+[32m+[m[32m        # rastgele uretici kullaniyoruz.[m
+[32m+[m[32m        self.rng = random.Random(seed)[m
+[32m+[m
+         self.divider = DividerWidget(draw)[m
+ [m
+     # --------------------------------------------------[m
+[36m@@ -189,10 +196,10 @@[m [mclass Sidebar:[m
+ [m
+         y = self._section_title(x, y, "ANALİZLER")[m
+ [m
+[31m-        chosen = random.sample(self.METRIC_POOL, k=3)[m
+[32m+[m[32m        chosen = self.rng.sample(self.METRIC_POOL, k=3)[m
+ [m
+         scores = [[m
+[31m-            (label, random.randint(58, 98))[m
+[32m+[m[32m            (label, self.rng.randint(58, 98))[m
+             for label in chosen[m
+         ][m
+ [m
+[36m@@ -297,8 +304,8 @@[m [mclass Sidebar:[m
+ [m
+         self.divider.draw_divider(x, y - 18, SidebarLayout.BAR_WIDTH)[m
+ [m
+[31m-        wrapped = "Daha iyi tasarımlar, daha fazla etkileşim.\nSoyTasarım ile fark yaratın!"[m
+[31m-[m
+[32m+[m[32m        wrapped = "Bot geliştirilme aşamasındadır. \nSoyTasarım"[m
+[32m+[m[32mgit status[m
+         self.draw.multiline_text([m
+             (x, y),[m
+             wrapped,[m

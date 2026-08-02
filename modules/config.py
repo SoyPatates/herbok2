@@ -26,6 +26,16 @@ SOHBET_KANALLARI = [
 ]
 
 # ==========================
+# Trusted Users
+# ==========================
+
+TRUSTED_USER_IDS = [
+    int(x)
+    for x in os.getenv("TRUSTED_USER_IDS", "").split(",")
+    if x.strip()
+]
+
+# ==========================
 # Memory
 # ==========================
 
