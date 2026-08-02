@@ -27,6 +27,7 @@ from modules.openrouter_manager import AllKeysExhaustedError
 from modules.prompts import (
     BASE_PROMPT,
     MEMORY_EXTRACTION_PROMPT,
+    TARGET_MEMORY_EXTRACTION_PROMPT,
     CASUAL_IMAGE_PROMPT,
 
 )
@@ -225,6 +226,46 @@ class HerbokologBot(commands.Bot):
                 user_id,
                 fact,
             )
+
+        # Mesajda baska kullanicilar hakkinda soylenen kalici bilgiler
+        # varsa, bunlari ONLARIN kendi profiline kaydet -- boylece bot
+        # sadece kendisiyle konusan kisiyi degil, hakkinda konusulan
+        # herkesi de zamanla "taniyabilir".
+        for u in mentioned_users:
+
+            target_prompt = TARGET_MEMORY_EXTRACTION_PROMPT.replace(
+                "{target_name}",
+                u.display_name,
+            )
+
+            target_extracted = self.ai.extract_profile_info(
+                prompt,
+                target_prompt,
+            )
+
+            for interest in target_extracted["interests"]:
+                self.profile.add_interest(
+                    u.id,
+                    interest,
+                )
+
+            for project in target_extracted["projects"]:
+                self.profile.add_project(
+                    u.id,
+                    project,
+                )
+
+            for preference in target_extracted["preferences"]:
+                self.profile.add_preference(
+                    u.id,
+                    preference,
+                )
+
+            for fact in target_extracted["facts"]:
+                self.profile.add_fact(
+                    u.id,
+                    fact,
+                )
 
         history = self.memory.history_text(
             message.channel.id

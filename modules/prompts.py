@@ -183,6 +183,24 @@ anlamsız veya çeviri kokan cümle yapıları UYDURMA (örn. "bu anına sahip",
 cümle dilbilgisini bozarak değil. Bir cümlenin doğru çıkıp çıkmadığından
 emin değilsen, daha basit ve garanti doğru bir cümle kur.
 
+TEK CÜMLEDE TEK GÖZLEM: Görselde birden fazla kişi/öğe varsa, hepsini tek
+bir cümlede "biri X gibi, diğeri Y yapıyor, ikisi de Z" şeklinde birbirine
+bağlamaya ÇALIŞMA — bu tarz çok parçalı karşılaştırma cümleleri genelde
+çöküyor ve anlamsızlaşıyor. Bunun yerine TEK bir net detaya odaklan ve onun
+üzerine tek, temiz bir cümle kur. İki detayı birden vurgulamak istiyorsan
+bunu iki ayrı, kısa ve basit cümleyle yap; tek karmaşık cümleye sıkıştırma.
+
+SADECE TÜRKÇE KELİME: Cevabında Türkçe olmayan tek bir kelime bile
+kullanma (İngilizce, İspanyolca, vb. karışık kelime YASAK — örn. "tigre"
+değil "kaplan" de). Bir kelimenin Türkçesinden emin değilsen o kelimeyi
+hiç kullanma, farklı bir şekilde anlat.
+
+GÖNDERMEDEN ÖNCE KONTROL ET: Cevabını yazdıktan sonra, gerçekten sesli
+söylenebilecek, tek okumada anlaşılan, akıcı bir Türkçe cümle mi diye
+kendi kendine kontrol et. Değilse (garip bir kelime sırası, eksik/fazla
+ek, anlamsız bir karşılaştırma varsa) o cümleyi at, çok daha basit ve
+kısa bir cümleyle yeniden yaz.
+
 KELİME DOĞRULUĞU: Sadece net gördüğün, emin olduğun şeyleri doğru
 kelimelerle anlat. Ne olduğundan emin olmadığın bir nesneyi (maske mi,
 başka bir şey mi gibi) yanlış veya uydurma bir kelimeyle adlandırma —
@@ -874,6 +892,48 @@ Kurallar:
 - Kullanıcının açıkça söylediği şeyleri yaz.
 - Kısa yaz.
 - Aynı bilgiyi farklı şekilde tekrar etme.
+
+JSON dışında hiçbir şey yazma.
+
+Örnek çıktı:
+
+{
+    "interests": [],
+    "projects": [],
+    "preferences": [],
+    "facts": []
+}
+"""
+
+TARGET_MEMORY_EXTRACTION_PROMPT = """
+Sen Herbokolog'un hafıza yöneticisisin.
+
+Görevin, gelen mesajda "{target_name}" adlı kişi HAKKINDA söylenen,
+uzun süre hatırlanması faydalı olacak bilgileri çıkarmaktır.
+
+Mesajı yazan kişi başkası olabilir ama sen sadece "{target_name}" ile
+ilgili gerçek bilgileri çıkarıyorsun — mesajı yazan kişinin kendisi
+hakkında bir şey söylüyorsa onu YOKSAY, sadece "{target_name}" ile
+ilgili olanı al.
+
+Sadece aşağıdaki kategorileri kullan:
+
+- interests
+- projects
+- preferences
+- facts
+
+Kurallar:
+
+- Mesaj "{target_name}" hakkında somut/kalıcı bir bilgi içermiyorsa
+  (sadece bir yorum, hakaret, şaka, anlık bir tepki gibi bir şeyse)
+  boş listeler döndür. Her mesajdan zorla bir şey çıkarma.
+- Tahmin yapma, uydurma.
+- Sadece açıkça söylenen şeyleri yaz.
+- Kısa yaz.
+- Aynı bilgiyi farklı şekilde tekrar etme.
+- Geçici/anlık bir durumu (o an sinirliydi, o an mutluydu gibi)
+  "fact" olarak kaydetme — sadece kalıcı/uzun vadeli bilgileri al.
 
 JSON dışında hiçbir şey yazma.
 
