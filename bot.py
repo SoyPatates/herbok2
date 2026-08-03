@@ -157,6 +157,13 @@ class EditEntryModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
 
+        if interaction.user.id not in TRUSTED_USER_IDS:
+            await interaction.response.send_message(
+                "❌ Bu paneli sadece güvenilir kullanıcılar kullanabilir.",
+                ephemeral=True,
+            )
+            return
+
         self.view_ref.profile.update_entry(
             self.category,
             self.row_id,
@@ -200,6 +207,13 @@ class AddEntryModal(discord.ui.Modal):
         self.add_item(self.value_input)
 
     async def on_submit(self, interaction: discord.Interaction):
+
+        if interaction.user.id not in TRUSTED_USER_IDS:
+            await interaction.response.send_message(
+                "❌ Bu paneli sadece güvenilir kullanıcılar kullanabilir.",
+                ephemeral=True,
+            )
+            return
 
         category = CATEGORY_ALIASES.get(
             str(self.category_input.value).strip().lower()
@@ -304,6 +318,9 @@ class ProfileManagementView(discord.ui.View):
 
         async def on_select(interaction: discord.Interaction):
 
+            if not await self._check_authorized(interaction):
+                return
+
             value = select.values[0]
 
             if value == "none":
@@ -321,6 +338,26 @@ class ProfileManagementView(discord.ui.View):
         select.callback = on_select
 
         self.add_item(select)
+
+    # --------------------------------------------------
+
+    async def _check_authorized(self, interaction: discord.Interaction) -> bool:
+        """
+        Bu paneldeki HERHANGI bir bilesene (dropdown, buton) sadece
+        guvenilir kullanicilar tiklayabilir -- mesaji kimin gonderdigi
+        onemli degil, mesaji goren HERKES aslinda etkilesime
+        girebilir, bu yuzden her tikta ayrica kontrol ediyoruz.
+        """
+
+        if interaction.user.id in TRUSTED_USER_IDS:
+            return True
+
+        await interaction.response.send_message(
+            "❌ Bu paneli sadece güvenilir kullanıcılar kullanabilir.",
+            ephemeral=True,
+        )
+
+        return False
 
     # --------------------------------------------------
 
@@ -357,6 +394,9 @@ class ProfileManagementView(discord.ui.View):
     )
     async def edit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
 
+        if not await self._check_authorized(interaction):
+            return
+
         if not self.selected:
             await interaction.response.send_message(
                 "Önce dropdown'dan bir kayıt seç.",
@@ -386,6 +426,9 @@ class ProfileManagementView(discord.ui.View):
     )
     async def delete_button(self, interaction: discord.Interaction, button: discord.ui.Button):
 
+        if not await self._check_authorized(interaction):
+            return
+
         if not self.selected:
             await interaction.response.send_message(
                 "Önce dropdown'dan bir kayıt seç.",
@@ -412,6 +455,9 @@ class ProfileManagementView(discord.ui.View):
         row=1,
     )
     async def add_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        if not await self._check_authorized(interaction):
+            return
 
         await interaction.response.send_modal(AddEntryModal(self))
 
