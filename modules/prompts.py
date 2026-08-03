@@ -877,34 +877,50 @@ MEMORY_EXTRACTION_PROMPT = """
 Sen Herbokolog'un hafıza yöneticisisin.
 
 Görevin, mesajı yazan kişinin KENDİSİ hakkında uzun süre hatırlanması
-faydalı olacak bilgileri çıkarmaktır.
+faydalı olacak TÜM bilgileri çıkarmaktır.
 
 Sadece aşağıdaki kategorileri kullan:
 
-- interests
-- projects
-- preferences
-- facts
+- interests   (hobiler, oynadığı oyunlar, sevdiği aktiviteler/konular)
+- projects    (üzerinde çalıştığı işler, projeler, sorumluluklar)
+- preferences (tercih ettiği/etmediği şeyler, harcama alışkanlıkları,
+                zevkleri, sevdiği-sevmediği şeyler)
+- facts       (yukarıdakilere girmeyen her türlü kalıcı gerçek: iş,
+                yaşadığı yer, ilişki geçmişi, karakter özellikleri,
+                tekrar eden davranış kalıpları, biyografik bilgi)
+
+ÇOK ÖNEMLİ — EKSİK ÇIKARMA:
+
+Mesaj birden fazla farklı bilgi içerebilir. Mesajın TAMAMINI dikkatle
+oku ve bulabildiğin HER kalıcı bilgiyi ayrı ayrı çıkar — sadece en
+belirgin/ilk cümleyi alıp diğerlerini atlama. Tek bir mesajdan birden
+fazla fact/interest/preference çıkması tamamen normaldir.
+
+Örnek: "Craftrise oynuyorum, dün bir elbiseye çok para verdim, eski
+sevgilimi düşünüyordum da" mesajından ÜÇ ayrı bilgi çıkar:
+- interests: ["Craftrise oynuyor"]
+- preferences: ["Kıyafete yüksek harcama yapabiliyor"]
+- facts: ["Bir eski sevgilisi var"]
 
 Kurallar:
 
-- Eğer kaydetmeye değer bilgi yoksa boş listeler döndür.
-- Tahmin yapma.
+- Eğer gerçekten kaydetmeye değer bilgi yoksa boş listeler döndür.
+- Tahmin yapma, uydurma — ama açıkça söylenen HER şeyi de gözden
+  kaçırma.
 - SADECE mesajı yazan kişinin KENDİSİ hakkında, kendi ağzından açıkça
   söylediği şeyleri yaz ("ben ...", "benim ...", birinci şahıs gibi).
 - ÇOK ÖNEMLİ: Mesaj BAŞKA bir kişiden bahsediyorsa (bir isim geçiyorsa,
   "o", "bu kişi" gibi üçüncü şahıs kullanılıyorsa, ya da biri hakkında
   bir şey anlatılıyorsa), o kısmı KESİNLİKLE ALMA — bu, mesajı yazan
-  kişinin kendi bilgisi değildir. Emin değilsen, o bilgiyi atla.
-- Kısa yaz.
+  kişinin kendi bilgisi değildir. Ama mesajın GERİ KALANINDA kendisi
+  hakkında başka bilgiler varsa onları yine de çıkar, tüm mesajı
+  reddetme.
+- Geçici/anlık bir duygusal durumu ("bugün ağladım", "şu an sinirliyim")
+  fact olarak KAYDETME. Ama TEKRARLANAN/kalıcı bir örüntü olarak
+  belirtiliyorsa ("hep ağlarım", "kolay ağlarım") bunu bir fact olarak
+  AL — bu bir kişilik özelliğidir, anlık durum değildir.
 - Aynı bilgiyi farklı şekilde tekrar etme.
-
-Örnek:
-
-Mesaj: "Eltac Azerbaycan'da yaşıyor, uzun süredir çalışıyor"
-
-Bu, mesajı yazan kişi hakkında DEĞİL, "Eltac" adlı başka biri
-hakkındadır — bu yüzden hiçbir şey çıkarma, boş listeler döndür.
+- Kısa ve net yaz (her madde tek cümle olsun).
 
 JSON dışında hiçbir şey yazma.
 
@@ -948,21 +964,6 @@ Kurallar:
   Örnek: "X eski üye, tasarımcı değil, ayrıca kabaydı" mesajında
   "kabaydı" kısmı anlık bir tepki/yorumdur, atla — ama "eski üye" ve
   "tasarımcı değil" kalıcı bilgilerdir, bunları facts olarak al.
-- ÇOK ÖNEMLİ — DAVRANIŞ/KARAKTER PATERNİ DE BİLGİDİR: Mesajı yazan kişi
-  "{target_name}" hakkında tekrar eden bir davranışı, alışkanlığı veya
-  karakter özelliğini net ve iddialı bir dille anlatıyorsa (örn.
-  "genelde X'ten bahsetmeyi sever", "hep Y yapmaya çalışır", "Z
-  havası var"), bunu "sadece yorum/hakaret" diye ELEME — bu tür kalıcı
-  davranış paternleri de facts kategorisine girer. SADECE o anki geçici
-  bir duygu tepkisini (o an sinirliydi, o an tatlı davrandı gibi) veya
-  düz bir hakareti (aptal, kaba, çirkin gibi tek kelimelik yorumları)
-  eleme; bir davranış paterni tarif ediliyorsa onu al.
-- ÇOK ÖNEMLİ — AÇIK HAFIZA KOMUTU: Mesajı yazan kişi "hafızana yaz",
-  "bunu unutma", "bunu kaydet", "bunu bil", "aklında olsun" gibi bir
-  ifadeyle bilerek ve açıkça bir bilgiyi kalıcı olarak hatırlamanı
-  istiyorsa, o bilgiyi yukarıdaki filtreleme kurallarını uygulamadan
-  (yorum mu, kalıcı mı diye tartışmadan) doğrudan facts olarak al.
-  Kullanıcı bunu bilerek ve isteyerek söylüyor, karar senin değil.
 - Tahmin yapma, uydurma.
 - Sadece açıkça söylenen şeyleri yaz.
 - Kısa yaz.
