@@ -40,60 +40,393 @@ intents.message_content = True
 intents.guilds = True
 
 
-class ProfilePagerView(discord.ui.View):
+CATEGORY_ALIASES = {
+    "facts": "facts",
+    "fact": "facts",
+    "bilgi": "facts",
+    "bilgiler": "facts",
+    "projects": "projects",
+    "project": "projects",
+    "proje": "projects",
+    "projeler": "projects",
+    "interests": "interests",
+    "interest": "interests",
+    "ilgi": "interests",
+    "ilgialani": "interests",
+    "ilgialanlari": "interests",
+    "preferences": "preferences",
+    "preference": "preferences",
+    "tercih": "preferences",
+    "tercihler": "preferences",
+}
+
+CATEGORY_LABELS = {
+    "interests": "İlgi Alanları",
+    "projects": "Projeler",
+    "preferences": "Tercihler",
+    "facts": "Bilinen Bilgiler",
+}
+
+
+def build_profile_pages(profile):
     """
-    'bilgi <id>' ciktisi birden fazla sayfaya bolunduyunde ekli
-    Onceki/Sonraki butonlari. 3 dakika hareketsizlik sonrasi
-    otomatik devre disi kalir (timeout).
+    get_profile_detailed() ciktisindan, her satiri gercek DB id'siyle
+    birlikte gosteren, sayfalara bolunmus metin listesi uretir. Her
+    sayfa Discord'un 2000 karakter sinirinin altinda kalacak sekilde
+    bolunur.
     """
 
-    def __init__(self, pages, timeout=180):
+    header_lines = [
+        f"**Kullanıcı ID:** {profile['user_id']}",
+        f"**Username:** {profile['username']}",
+        f"**Display name:** {profile['display_name']}",
+        f"**Son görülme:** {profile['last_seen']}",
+        "",
+    ]
+
+    body_lines = []
+
+    has_any = False
+
+    for category in ("interests", "projects", "preferences", "facts"):
+
+        entries = profile[category]
+
+        if not entries:
+            continue
+
+        has_any = True
+
+        body_lines.append(f"**{CATEGORY_LABELS[category]}:**")
+
+        for row_id, value in entries:
+            body_lines.append(f"`[{row_id}]` {value}")
+
+        body_lines.append("")
+
+    if not has_any:
+        body_lines.append(
+            "_Hiçbir interest/project/preference/fact kaydı yok._"
+        )
+
+    pages = []
+
+    current = list(header_lines)
+    current_len = sum(len(l) + 1 for l in current)
+
+    for line in body_lines:
+
+        line_len = len(line) + 1
+
+        if current_len + line_len > 1800 and len(current) > len(header_lines):
+
+            pages.append("\n".join(current))
+            current = list(header_lines)
+            current_len = sum(len(l) + 1 for l in current)
+
+        current.append(line)
+        current_len += line_len
+
+    pages.append("\n".join(current))
+
+    return pages
+
+
+class EditEntryModal(discord.ui.Modal):
+    """
+    'Düzenle' butonuna basinca acilan form -- secili kaydin metnini
+    duzenlemek icin bir metin kutusu gosterir.
+    """
+
+    def __init__(self, view, category, row_id, current_value):
+
+        super().__init__(title=f"Kaydı Düzenle [{row_id}]")
+
+        self.view_ref = view
+        self.category = category
+        self.row_id = row_id
+
+        self.value_input = discord.ui.TextInput(
+            label="Yeni metin",
+            style=discord.TextStyle.paragraph,
+            default=current_value[:4000],
+            max_length=500,
+        )
+
+        self.add_item(self.value_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        self.view_ref.profile.update_entry(
+            self.category,
+            self.row_id,
+            self.view_ref.user_id,
+            str(self.value_input.value),
+        )
+
+        await self.view_ref.refresh()
+
+        await interaction.response.send_message(
+            "✅ Güncellendi.",
+            ephemeral=True,
+        )
+
+
+class AddEntryModal(discord.ui.Modal):
+    """
+    'Ekle' butonuna basinca acilan form -- yeni kategori + metin
+    girisi icin iki alan gosterir.
+    """
+
+    def __init__(self, view):
+
+        super().__init__(title="Yeni Kayıt Ekle")
+
+        self.view_ref = view
+
+        self.category_input = discord.ui.TextInput(
+            label="Kategori",
+            placeholder="facts / projects / interests / preferences",
+            max_length=30,
+        )
+
+        self.value_input = discord.ui.TextInput(
+            label="Metin",
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+        )
+
+        self.add_item(self.category_input)
+        self.add_item(self.value_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+
+        category = CATEGORY_ALIASES.get(
+            str(self.category_input.value).strip().lower()
+        )
+
+        if category is None:
+            await interaction.response.send_message(
+                "❌ Geçersiz kategori. facts/projects/interests/"
+                "preferences (ya da bilgi/proje/ilgi/tercih) kullan.",
+                ephemeral=True,
+            )
+            return
+
+        self.view_ref.profile.ensure_user(
+            self.view_ref.user_id,
+            str(self.view_ref.user_id),
+            str(self.view_ref.user_id),
+        )
+
+        self.view_ref.profile.add_entry(
+            category,
+            self.view_ref.user_id,
+            str(self.value_input.value),
+        )
+
+        await self.view_ref.refresh()
+
+        await interaction.response.send_message(
+            "✅ Eklendi.",
+            ephemeral=True,
+        )
+
+
+class ProfileManagementView(discord.ui.View):
+    """
+    'bilgi <id>' ciktisina eklenen interaktif yonetim paneli:
+    - Dropdown ile bir kayit sec
+    - Duzenle / Sil / Ekle butonlari
+    - Duzenleme ve ekleme gercek Discord formlariyla (modal) yapilir
+
+    Discord'un Select bileseni en fazla 25 secenek destekler, o
+    yuzden ilk 25 kayit gosterilir -- cok daha fazla kaydi olan bir
+    kullanici icin metin komutlariyla (sil/ekle/duzenle) devam
+    edilebilir.
+    """
+
+    def __init__(self, profile_manager, user_id, timeout=300):
 
         super().__init__(timeout=timeout)
 
-        self.pages = pages
-        self.index = 0
+        self.profile = profile_manager
+        self.user_id = user_id
+        self.message = None
+        self.selected = None
 
-        self._update_buttons()
+        self._build_select()
+        self._sync_button_states()
 
-    def _update_buttons(self):
+    # --------------------------------------------------
 
-        self.prev_button.disabled = self.index == 0
-        self.next_button.disabled = self.index == len(self.pages) - 1
+    def _flatten_entries(self):
 
-    def _page_content(self):
+        detailed = self.profile.get_profile_detailed(self.user_id)
 
-        return (
-            self.pages[self.index]
-            + f"\n\n_Sayfa {self.index + 1}/{len(self.pages)}_"
+        entries = []
+
+        if detailed:
+            for category in ("interests", "projects", "preferences", "facts"):
+                for row_id, value in detailed[category]:
+                    entries.append((category, row_id, value))
+
+        return entries
+
+    # --------------------------------------------------
+
+    def _build_select(self):
+
+        for item in list(self.children):
+            if isinstance(item, discord.ui.Select):
+                self.remove_item(item)
+
+        entries = self._flatten_entries()[:25]
+
+        options = [
+            discord.SelectOption(
+                label=f"[{row_id}] {CATEGORY_LABELS[category]}"[:100],
+                description=value[:100],
+                value=f"{category}:{row_id}",
+            )
+            for category, row_id, value in entries
+        ]
+
+        if not options:
+            options = [discord.SelectOption(label="Kayıt yok", value="none")]
+
+        select = discord.ui.Select(
+            placeholder="Düzenlemek/silmek için bir kayıt seç...",
+            options=options,
+            disabled=not entries,
+            row=0,
         )
 
-    @discord.ui.button(label="◀ Önceki", style=discord.ButtonStyle.secondary)
-    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        async def on_select(interaction: discord.Interaction):
 
-        self.index = max(0, self.index - 1)
-        self._update_buttons()
+            value = select.values[0]
 
-        await interaction.response.edit_message(
-            content=self._page_content(),
-            view=self,
+            if value == "none":
+                await interaction.response.defer()
+                return
+
+            category, row_id = value.split(":", 1)
+
+            self.selected = (category, int(row_id))
+
+            self._sync_button_states()
+
+            await interaction.response.edit_message(view=self)
+
+        select.callback = on_select
+
+        self.add_item(select)
+
+    # --------------------------------------------------
+
+    def _sync_button_states(self):
+
+        has_selection = self.selected is not None
+
+        self.edit_button.disabled = not has_selection
+        self.delete_button.disabled = not has_selection
+
+    # --------------------------------------------------
+
+    async def refresh(self):
+
+        self.selected = None
+
+        self._build_select()
+        self._sync_button_states()
+
+        if self.message:
+
+            profile = self.profile.get_profile_detailed(self.user_id)
+
+            content = build_profile_pages(profile)[0]
+
+            await self.message.edit(content=content, view=self)
+
+    # --------------------------------------------------
+
+    @discord.ui.button(
+        label="✏️ Düzenle",
+        style=discord.ButtonStyle.primary,
+        row=1,
+    )
+    async def edit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        if not self.selected:
+            await interaction.response.send_message(
+                "Önce dropdown'dan bir kayıt seç.",
+                ephemeral=True,
+            )
+            return
+
+        category, row_id = self.selected
+
+        entries = self._flatten_entries()
+
+        current = next(
+            (v for c, r, v in entries if c == category and r == row_id),
+            "",
         )
 
-    @discord.ui.button(label="Sonraki ▶", style=discord.ButtonStyle.secondary)
-    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        self.index = min(len(self.pages) - 1, self.index + 1)
-        self._update_buttons()
-
-        await interaction.response.edit_message(
-            content=self._page_content(),
-            view=self,
+        await interaction.response.send_modal(
+            EditEntryModal(self, category, row_id, current)
         )
+
+    # --------------------------------------------------
+
+    @discord.ui.button(
+        label="🗑️ Sil",
+        style=discord.ButtonStyle.danger,
+        row=1,
+    )
+    async def delete_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        if not self.selected:
+            await interaction.response.send_message(
+                "Önce dropdown'dan bir kayıt seç.",
+                ephemeral=True,
+            )
+            return
+
+        category, row_id = self.selected
+
+        self.profile.delete_entry(category, row_id, self.user_id)
+
+        await self.refresh()
+
+        await interaction.response.send_message(
+            "✅ Silindi.",
+            ephemeral=True,
+        )
+
+    # --------------------------------------------------
+
+    @discord.ui.button(
+        label="➕ Ekle",
+        style=discord.ButtonStyle.success,
+        row=1,
+    )
+    async def add_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        await interaction.response.send_modal(AddEntryModal(self))
+
+    # --------------------------------------------------
 
     async def on_timeout(self):
 
         for item in self.children:
             item.disabled = True
+
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except Exception:
+                pass
 
 
 class HerbokologBot(commands.Bot):
@@ -491,38 +824,9 @@ class HerbokologBot(commands.Bot):
         )
     # --------------------------------------------------
 
-    # Kullanicinin yazdigi kategori isimlerini gercek DB kategorisine
-    # cevirir (Turkce takma adlar dahil).
-    CATEGORY_ALIASES = {
-        "facts": "facts",
-        "fact": "facts",
-        "bilgi": "facts",
-        "bilgiler": "facts",
-        "projects": "projects",
-        "project": "projects",
-        "proje": "projects",
-        "projeler": "projects",
-        "interests": "interests",
-        "interest": "interests",
-        "ilgi": "interests",
-        "ilgialani": "interests",
-        "ilgialanlari": "interests",
-        "preferences": "preferences",
-        "preference": "preferences",
-        "tercih": "preferences",
-        "tercihler": "preferences",
-    }
-
-    CATEGORY_LABELS = {
-        "interests": "İlgi Alanları",
-        "projects": "Projeler",
-        "preferences": "Tercihler",
-        "facts": "Bilinen Bilgiler (facts)",
-    }
-
     def resolve_category(self, raw):
 
-        return self.CATEGORY_ALIASES.get(raw.strip().lower())
+        return CATEGORY_ALIASES.get(raw.strip().lower())
 
     # --------------------------------------------------
 
@@ -531,7 +835,7 @@ class HerbokologBot(commands.Bot):
         "@herbokolog bilgi <id>" ya da "@herbokolog bilgi @kullanici"
         komutunu yakalar. Bu komut normal process_text/AI akisina hic
         girmez -- DB'deki HAM profili (yorum/filtre olmadan) direkt
-        geri doner. Debug/kontrol amacli, basit bir ek komut.
+        geri doner, interaktif yonetim menusuyle birlikte.
 
         Eslesme yoksa None doner.
         """
@@ -633,73 +937,6 @@ class HerbokologBot(commands.Bot):
 
     # --------------------------------------------------
 
-    def build_profile_pages(self, profile):
-        """
-        get_profile_detailed() ciktisindan, her satiri gercek DB
-        id'siyle birlikte gosteren, sayfalara bolunmus metin listesi
-        uretir. Her sayfa Discord'un 2000 karakter sinirinin altinda
-        kalacak sekilde bolunur.
-        """
-
-        header_lines = [
-            f"**Kullanıcı ID:** {profile['user_id']}",
-            f"**Username:** {profile['username']}",
-            f"**Display name:** {profile['display_name']}",
-            f"**Son görülme:** {profile['last_seen']}",
-            "",
-        ]
-
-        body_lines = []
-
-        has_any = False
-
-        for category in ("interests", "projects", "preferences", "facts"):
-
-            entries = profile[category]
-
-            if not entries:
-                continue
-
-            has_any = True
-
-            body_lines.append(f"**{self.CATEGORY_LABELS[category]}:**")
-
-            for row_id, value in entries:
-                body_lines.append(f"`[{row_id}]` {value}")
-
-            body_lines.append("")
-
-        if not has_any:
-            body_lines.append(
-                "_Hiçbir interest/project/preference/fact kaydı yok._"
-            )
-
-        # Sayfalara bol: her sayfa header + kadar-siga-o-kadar body
-        # satiri, 1800 karaktere kadar (guvenlik payi birakiyoruz).
-        pages = []
-
-        current = list(header_lines)
-        current_len = sum(len(l) + 1 for l in current)
-
-        for line in body_lines:
-
-            line_len = len(line) + 1
-
-            if current_len + line_len > 1800 and len(current) > len(header_lines):
-
-                pages.append("\n".join(current))
-                current = list(header_lines)
-                current_len = sum(len(l) + 1 for l in current)
-
-            current.append(line)
-            current_len += line_len
-
-        pages.append("\n".join(current))
-
-        return pages
-
-    # --------------------------------------------------
-
     async def send_info_command(self, message, user_id):
 
         profile = self.profile.get_profile_detailed(user_id)
@@ -711,19 +948,27 @@ class HerbokologBot(commands.Bot):
             )
             return
 
-        pages = self.build_profile_pages(profile)
+        pages = build_profile_pages(profile)
 
-        if len(pages) == 1:
-            await self.send_response(message, pages[0])
-            return
+        content = pages[0]
 
-        view = ProfilePagerView(pages)
+        if len(pages) > 1:
+            content += (
+                f"\n\n_(Toplam {len(pages)} sayfa var, ama aşağıdaki "
+                "yönetim menüsü ilk 25 kaydı gösterir. Metin "
+                "komutlarıyla (`sil`/`ekle`/`düzenle`) diğerlerine "
+                "de ulaşabilirsin.)_"
+            )
 
-        await message.reply(
-            pages[0] + f"\n\n_Sayfa 1/{len(pages)}_",
+        view = ProfileManagementView(self.profile, user_id)
+
+        sent = await message.reply(
+            content,
             view=view,
             mention_author=False,
         )
+
+        view.message = sent
 
     # --------------------------------------------------
 
