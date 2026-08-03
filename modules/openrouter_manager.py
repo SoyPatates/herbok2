@@ -1,3 +1,5 @@
+import time
+
 from openai import (
     OpenAI,
     APIStatusError,
@@ -21,8 +23,9 @@ class EmptyModelResponseError(Exception):
     """
     Model API'den hata fırlatmadan ama icerik olmadan (choices bos/None)
     bir cevap dondurdugunde firlatilir. Genelde OpenRouter'daki ucretsiz
-    modellerin o an kapasite/kesinti yasadigi durumlarda olur -- key ile
-    ilgisi yoktur, bu yuzden key rotasyonu bunu cozmez.
+    modellerin o an kapasite/kesinti yasadigi durumlarda olur. Bu bir
+    key sorunu degildir -- ama gecici oldugu icin kisa bir bekleme
+    sonrasi tekrar denemek genelde cozer (bkz. _create_with_retry).
     """
 
     def __init__(self, model: str = ""):
@@ -36,6 +39,11 @@ class EmptyModelResponseError(Exception):
 class OpenRouterManager:
 
     BASE_URL = "https://openrouter.ai/api/v1"
+
+    # Bos cevap (EmptyModelResponseError) icin, AYNI anahtarla kac kez
+    # ve kac saniye arayla tekrar denenecegi.
+    EMPTY_RESPONSE_RETRIES = 2
+    EMPTY_RESPONSE_DELAY = 1.5
 
     def __init__(self, api_keys: list[str]):
         if not api_keys:
@@ -51,6 +59,14 @@ class OpenRouterManager:
         )
 
     def _should_rotate(self, error: Exception) -> bool:
+
+        if isinstance(error, EmptyModelResponseError):
+            # Ayni key ile birkac kez denendi (_create_with_retry
+            # icinde), hala bos donuyorsa artik bir sonraki key'e
+            # gecmeyi deneyebiliriz -- key farkli bir OpenRouter
+            # saglayicisina yonlendirebilir, tamamen imkansiz degil.
+            return True
+
         if isinstance(error, (RateLimitError, AuthenticationError, APIConnectionError)):
             return True
 
@@ -71,6 +87,41 @@ class OpenRouterManager:
 
         return any(keyword in msg for keyword in keywords)
 
+    def _create_with_retry(self, client, kwargs, model_name):
+        """
+        client.chat.completions.create(**kwargs) cagirir. Eger model
+        bos/gecersiz bir cevap (choices yok) donerse, AYNI anahtarla
+        kisa bir bekleme sonrasi birkac kez daha dener -- bu genelde
+        ucretsiz modelin gecici bir kapasite sorunu yasadigi anlamina
+        gelir, cogu zaman 1-2 saniye icinde duzelir.
+
+        Tum denemeler de bos donerse EmptyModelResponseError firlatir.
+        """
+
+        last_error = None
+
+        for attempt in range(1, self.EMPTY_RESPONSE_RETRIES + 2):
+
+            result = client.chat.completions.create(**kwargs)
+
+            if getattr(result, "choices", None):
+                return result
+
+            logger.warning(
+                "chat_completions_create: model=%s bos/None choices "
+                "dondurdu (deneme %d/%d, ayni key).",
+                model_name,
+                attempt,
+                self.EMPTY_RESPONSE_RETRIES + 1,
+            )
+
+            last_error = EmptyModelResponseError(model_name)
+
+            if attempt <= self.EMPTY_RESPONSE_RETRIES:
+                time.sleep(self.EMPTY_RESPONSE_DELAY)
+
+        raise last_error
+
     def chat_completions_create(self, **kwargs):
         last_error = None
         model_name = kwargs.get("model", "")
@@ -83,16 +134,8 @@ class OpenRouterManager:
                     api_key=self.api_keys[idx],
                     base_url=self.BASE_URL,
                 )
-                result = client.chat.completions.create(**kwargs)
 
-                if not getattr(result, "choices", None):
-                    logger.warning(
-                        "chat_completions_create: model=%s bos/None "
-                        "choices dondurdu. Ham cevap: %r",
-                        model_name,
-                        result,
-                    )
-                    raise EmptyModelResponseError(model_name)
+                result = self._create_with_retry(client, kwargs, model_name)
 
                 self.current_index = idx
                 return result
