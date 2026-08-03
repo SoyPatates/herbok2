@@ -984,3 +984,83 @@ JSON dışında hiçbir şey yazma.
     "facts": []
 }
 """
+COMBINED_MEMORY_EXTRACTION_PROMPT = """
+Sen Herbokolog'un hafıza yöneticisisin.
+
+Bu mesajdan İKİ farklı türde bilgi çıkaracaksın, TEK bir JSON cevapta:
+
+1) "self" — mesajı yazan kişinin KENDİSİ hakkında söylediği bilgiler.
+2) "targets" — mesajda etiketlenen şu kişiler hakkında söylenenler:
+   {target_names}
+
+------------------------------------------------
+
+SELF (mesajı yazan kişi) KURALLARI:
+
+- Mesajın TAMAMINI dikkatle oku, bulabildiğin HER kalıcı bilgiyi ayrı
+  ayrı çıkar — sadece en belirgin/ilk cümleyi alıp diğerlerini atlama.
+  Tek mesajdan birden fazla fact/interest/preference çıkması normaldir.
+- SADECE mesajı yazan kişinin KENDİSİ hakkında, kendi ağzından açıkça
+  söylediği şeyleri yaz ("ben ...", "benim ...", birinci şahıs gibi).
+- Mesaj yukarıda listelenen hedef kişilerden (targets) birinden
+  bahsediyorsa, o kısmı SELF'e alma — o bilgi "targets" altına,
+  ilgili kişinin adının altına gitmeli.
+- Mesaj hiç listede olmayan BAŞKA bir üçüncü kişiden bahsediyorsa
+  (isim geçiyor ama targets listesinde değilse), o kısmı ne self'e
+  ne targets'a al — tamamen atla.
+- Geçici/anlık bir duygusal durumu ("bugün ağladım") fact olarak
+  KAYDETME. Ama TEKRARLANAN bir örüntü ise ("hep ağlarım") bir
+  kişilik özelliği olarak AL.
+- Kategoriler: interests (hobi/oyun/aktivite), projects (iş/proje/
+  sorumluluk), preferences (tercihler/alışkanlıklar/zevkler),
+  facts (yukarıdakine girmeyen her türlü kalıcı bilgi).
+
+------------------------------------------------
+
+TARGETS (etiketlenen kişiler) KURALLARI — her isim için ayrı ayrı:
+
+- Mesaj o kişi hakkında somut/kalıcı bir bilgi içermiyorsa (sadece
+  bir yorum, hakaret, şaka, anlık bir tepkiyse) o kişi için boş
+  listeler döndür.
+- ÇOK ÖNEMLİ: Bir mesaj hem somut/kalıcı bir bilgi HEM DE bir hakaret/
+  yorum içerebilir aynı anda. Böyle durumda mesajın TAMAMINI reddetme
+  — sadece hakaret/yorum kısmını atla, somut/kalıcı kısmı (rol, geçmiş,
+  meslek, üyelik durumu gibi) yine de çıkar.
+  Örnek: "X eski üye, tasarımcı değil, ayrıca kabaydı" → "kabaydı"
+  kısmını atla, "eski üye" ve "tasarımcı değil" kısımlarını facts
+  olarak al.
+- Tekrar eden bir davranış kalıbı ("genelde X yapar", "hep Y'den
+  bahseder", "sürekli Z ediyor") kalıcı bilgidir, AL — bu bir anlık
+  tepki değil, bir karakter özelliğidir.
+- Eğer mesajı yazan kişi AÇIKÇA "hafızana yaz", "bunu unutma",
+  "kaydet" gibi bir komut veriyorsa, o durumda yukarıdaki filtreleri
+  uygulama — söylenen şeyi doğrudan ilgili kategoriye yaz, çünkü
+  kullanıcı bilerek ve isteyerek kaydedilmesini istiyor.
+- Tahmin yapma, uydurma. Sadece açıkça söyleneni yaz.
+
+------------------------------------------------
+
+JSON formatı — SADECE bu formatta cevap ver, başka hiçbir şey yazma:
+
+{
+    "self": {
+        "interests": [],
+        "projects": [],
+        "preferences": [],
+        "facts": []
+    },
+    "targets": {
+        "<hedef kişinin adı>": {
+            "interests": [],
+            "projects": [],
+            "preferences": [],
+            "facts": []
+        }
+    }
+}
+
+"targets" altında SADECE yukarıda listelenen isimleri anahtar olarak
+kullan, başka isim ekleme. Hakkında hiçbir şey bulamadığın bir hedef
+için de o ismi boş listelerle birlikte JSON'da bulundur (anahtarı
+atlama).
+"""

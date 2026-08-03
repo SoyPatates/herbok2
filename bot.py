@@ -29,7 +29,7 @@ from modules.logger import logger
 from modules.prompts import (
     BASE_PROMPT,
     MEMORY_EXTRACTION_PROMPT,
-    TARGET_MEMORY_EXTRACTION_PROMPT,
+    COMBINED_MEMORY_EXTRACTION_PROMPT,
     CASUAL_IMAGE_PROMPT,
 
 )
@@ -670,88 +670,106 @@ class HerbokologBot(commands.Bot):
             prompt,
         )
 
-        extracted = self.ai.extract_profile_info(
-            prompt,
-            MEMORY_EXTRACTION_PROMPT,
+        # Kendi-hakkinda VE (varsa, guvenilir kullaniciysa) etiketlenen
+        # kisiler hakkinda bilgiyi artik TEK bir AI cagrisinda birlikte
+        # cikariyoruz -- onceden 1 + N ayri cagri yapiliyordu (N =
+        # etiketlenen kisi sayisi), bu gereksiz API tuketimi yaratiyordu.
+        do_target_extraction = (
+            message.author.id in TRUSTED_USER_IDS
+            and bool(extraction_targets)
         )
 
-        for interest in extracted["interests"]:
+        if do_target_extraction:
+
+            target_names = [u.display_name for u in extraction_targets]
+
+            combined_prompt = COMBINED_MEMORY_EXTRACTION_PROMPT.replace(
+                "{target_names}",
+                ", ".join(target_names),
+            )
+
+            combined = self.ai.extract_combined_profile_info(
+                prompt,
+                combined_prompt,
+                target_names,
+            )
+
+            self_extracted = combined["self"]
+            targets_extracted = combined["targets"]
+
+        else:
+
+            self_extracted = self.ai.extract_profile_info(
+                prompt,
+                MEMORY_EXTRACTION_PROMPT,
+            )
+
+            targets_extracted = {}
+
+        for interest in self_extracted["interests"]:
             self.profile.add_interest(
                 user_id,
                 interest,
             )
 
-        for project in extracted["projects"]:
+        for project in self_extracted["projects"]:
             self.profile.add_project(
                 user_id,
                 project,
             )
 
-        for preference in extracted["preferences"]:
+        for preference in self_extracted["preferences"]:
             self.profile.add_preference(
                 user_id,
                 preference,
             )
 
-        for fact in extracted["facts"]:
+        for fact in self_extracted["facts"]:
             self.profile.add_fact(
                 user_id,
                 fact,
             )
 
-        # Mesajda baska kullanicilar hakkinda soylenen kalici bilgiler
-        # varsa, bunlari ONLARIN kendi profiline kaydet -- boylece bot
-        # sadece kendisiyle konusan kisiyi degil, hakkinda konusulan
-        # herkesi de zamanla "taniyabilir".
-        #
-        # GUVENLIK: bu SADECE guvenilir kullanicilardan (TRUSTED_USER_IDS)
-        # gelen mesajlarda calisir. Yoksa herhangi biri baskasi hakkinda
-        # asilsiz/kotu niyetli bir "bilgi" soyleyip onu kalici hafizaya
-        # yazdirabilir. Guvenilir olmayan biri baskasindan bahsettiginde
-        # bot o mesaja o an normal cevap verir ama hicbir sey kaydetmez.
-        if message.author.id in TRUSTED_USER_IDS:
+        # Hedef kisiler hakkinda cikan bilgiler (varsa) kendi
+        # profillerine yazilir. GUVENLIK: do_target_extraction zaten
+        # yukarida TRUSTED_USER_IDS kontrolunden geciyor, bu dongu
+        # guvenilir olmayan biri icin hicbir zaman calismaz.
+        for u in extraction_targets:
 
-            for u in extraction_targets:
+            target_data = targets_extracted.get(u.display_name)
 
-                target_prompt = TARGET_MEMORY_EXTRACTION_PROMPT.replace(
-                    "{target_name}",
-                    u.display_name,
+            if not target_data:
+                continue
+
+            logger.info(
+                "target extraction (%s) -> %s",
+                u.display_name,
+                target_data,
+            )
+
+            for interest in target_data["interests"]:
+                self.profile.add_interest(
+                    u.id,
+                    interest,
                 )
 
-                target_extracted = self.ai.extract_profile_info(
-                    prompt,
-                    target_prompt,
+            for project in target_data["projects"]:
+                self.profile.add_project(
+                    u.id,
+                    project,
                 )
 
-                logger.info(
-                    "target extraction (%s) -> %s",
-                    u.display_name,
-                    target_extracted,
+            for preference in target_data["preferences"]:
+                self.profile.add_preference(
+                    u.id,
+                    preference,
                 )
 
-                for interest in target_extracted["interests"]:
-                    self.profile.add_interest(
-                        u.id,
-                        interest,
-                    )
-
-                for project in target_extracted["projects"]:
-                    self.profile.add_project(
-                        u.id,
-                        project,
-                    )
-
-                for preference in target_extracted["preferences"]:
-                    self.profile.add_preference(
-                        u.id,
-                        preference,
-                    )
-
-                for fact in target_extracted["facts"]:
-                    self.profile.add_fact(
-                        u.id,
-                        fact,
-                    )
+            for fact in target_data["facts"]:
+                self.profile.add_fact(
+                    u.id,
+                    fact,
+                )
 
         history = self.memory.history_text(
             message.channel.id

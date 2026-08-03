@@ -10,6 +10,13 @@ from modules.logger import logger
 CHAT_MODEL = "google/gemma-4-26b-a4b-it:free"
 VISION_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
 
+EMPTY_CATEGORY_DICT = {
+    "interests": [],
+    "projects": [],
+    "preferences": [],
+    "facts": [],
+}
+
 
 class AIClient:
 
@@ -203,6 +210,131 @@ class AIClient:
             )
 
         return result
+
+    # -----------------------------------------------------
+
+    def extract_combined_profile_info(
+        self,
+        text: str,
+        prompt: str,
+        target_names: list,
+    ) -> dict:
+        """
+        extract_profile_info ile ayni is ama TEK cagrida hem mesaji
+        yazanin kendi hakkindaki bilgisini HEM DE mesajda etiketlenen
+        kisi(ler) hakkindaki bilgiyi birlikte cikarir. Onceden bunlar
+        1 + N ayri AI cagrisiydi (N = etiketlenen kisi sayisi), bu da
+        API kullanimini gereksiz yere artiriyordu.
+
+        Donen deger:
+        {
+            "self": {"interests": [...], "projects": [...], ...},
+            "targets": {
+                "<isim>": {"interests": [...], ...},
+                ...
+            }
+        }
+
+        target_names, prompt icindeki {target_names} yerine zaten
+        gecirilmis olmali (bkz. COMBINED_MEMORY_EXTRACTION_PROMPT) --
+        burada sadece JSON'daki "targets" altinda hangi isimlerin
+        bekledigini bilmek icin (parse hatasinda dogru bos yapiyi
+        kurabilmek icin) kullanilir.
+        """
+
+        content = self.chat(
+            [
+                {
+                    "role": "system",
+                    "content": prompt,
+                },
+                {
+                    "role": "user",
+                    "content": text,
+                },
+            ]
+        )
+
+        raw_content = content
+
+        content = content.replace("```json", "")
+        content = content.replace("```", "")
+        content = content.strip()
+
+        empty_targets = {
+            name: dict(EMPTY_CATEGORY_DICT)
+            for name in target_names
+        }
+
+        try:
+            data = json.loads(content)
+
+        except Exception as e:
+
+            logger.warning(
+                "extract_combined_profile_info: JSON parse basarisiz "
+                "(%s). Ham model cevabi: %r",
+                e,
+                raw_content[:1000],
+            )
+
+            return {
+                "self": dict(EMPTY_CATEGORY_DICT),
+                "targets": empty_targets,
+            }
+
+        self_data = data.get("self", {})
+
+        result_self = {
+            "interests": self_data.get("interests", []),
+            "projects": self_data.get("projects", []),
+            "preferences": self_data.get("preferences", []),
+            "facts": self_data.get("facts", []),
+        }
+
+        targets_data = data.get("targets", {})
+
+        result_targets = {}
+
+        for name in target_names:
+
+            t = targets_data.get(name, {})
+
+            result_targets[name] = {
+                "interests": t.get("interests", []),
+                "projects": t.get("projects", []),
+                "preferences": t.get("preferences", []),
+                "facts": t.get("facts", []),
+            }
+
+        total = (
+            sum(len(v) for v in result_self.values())
+            + sum(
+                len(v)
+                for t in result_targets.values()
+                for v in t.values()
+            )
+        )
+
+        if total == 0:
+            logger.debug(
+                "extract_combined_profile_info: gecerli JSON ama "
+                "hicbir kategori dolu degil. Ham cevap: %r",
+                raw_content[:500],
+            )
+        else:
+            logger.info(
+                "extract_combined_profile_info: %d bilgi cikarildi -> "
+                "self=%s targets=%s",
+                total,
+                result_self,
+                result_targets,
+            )
+
+        return {
+            "self": result_self,
+            "targets": result_targets,
+        }
 
     # -----------------------------------------------------
 
