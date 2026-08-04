@@ -683,9 +683,29 @@ class HerbokologBot(commands.Bot):
 
             target_names = [u.display_name for u in extraction_targets]
 
+            self_known = self.profile.known_summary(user_id) or "(yok)"
+
+            targets_known_blocks = []
+
+            for u in extraction_targets:
+
+                summary = self.profile.known_summary(u.id) or "(yok)"
+
+                targets_known_blocks.append(
+                    f"{u.display_name} için zaten bilinenler:\n{summary}"
+                )
+
+            targets_known = "\n\n".join(targets_known_blocks)
+
             combined_prompt = COMBINED_MEMORY_EXTRACTION_PROMPT.replace(
                 "{target_names}",
                 ", ".join(target_names),
+            ).replace(
+                "{self_known_info}",
+                self_known,
+            ).replace(
+                "{targets_known_info}",
+                targets_known,
             )
 
             combined = self.ai.extract_combined_profile_info(
@@ -699,9 +719,16 @@ class HerbokologBot(commands.Bot):
 
         else:
 
+            self_known = self.profile.known_summary(user_id) or "(yok)"
+
+            self_prompt = MEMORY_EXTRACTION_PROMPT.replace(
+                "{known_info}",
+                self_known,
+            )
+
             self_extracted = self.ai.extract_profile_info(
                 prompt,
-                MEMORY_EXTRACTION_PROMPT,
+                self_prompt,
             )
 
             targets_extracted = {}

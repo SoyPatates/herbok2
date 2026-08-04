@@ -523,6 +523,42 @@ class ProfileManager:
 
     # --------------------------------------------------
 
+    def known_summary(self, user_id: int, max_items: int = 40) -> str:
+        """
+        build_profile_prompt'a benzer ama hafiza CIKARIMI (extraction)
+        prompt'larina baglam vermek icin kullanilir -- "bu kisi
+        hakkinda zaten bunlar biliniyor, ayni anlamda bir sey tekrar
+        cikarma" demek icin. Bos ise "" doner.
+
+        max_items: cok kayitli kullanicilarda prompt'un asiri
+        buyumesini onlemek icin toplam satir sayisi sinirlanir (en
+        yeni kayitlar tutulur).
+        """
+
+        profile = self.get_profile(user_id)
+
+        if profile is None:
+            return ""
+
+        lines = []
+
+        for category, label in (
+            ("interests", "İlgi Alanı"),
+            ("projects", "Proje"),
+            ("preferences", "Tercih"),
+            ("facts", "Bilgi"),
+        ):
+
+            for value in profile[category]:
+                lines.append(f"- ({label}) {value}")
+
+        if len(lines) > max_items:
+            lines = lines[-max_items:]
+
+        return "\n".join(lines)
+
+    # --------------------------------------------------
+
     def build_profile_prompt(self, user_id: int) -> str:
 
         profile = self.get_profile(user_id)

@@ -879,6 +879,20 @@ Sen Herbokolog'un hafıza yöneticisisin.
 Görevin, mesajı yazan kişinin KENDİSİ hakkında uzun süre hatırlanması
 faydalı olacak TÜM bilgileri çıkarmaktır.
 
+------------------------------------------------
+
+BU KİŞİ HAKKINDA ZATEN BİLİNENLER:
+
+{known_info}
+
+ÇOK ÖNEMLİ — TEKRAR ÇIKARMA: Yukarıdaki listede, ANLAM olarak (kelimeler
+farklı olsa bile) zaten var olan bir bilgiyi TEKRAR çıkarma. Örneğin
+yukarıda "Craftrise oynuyor" zaten varsa, mesajda "Craftrise'i
+seviyorum" geçse bile bunu tekrar ekleme — aynı bilgi. Sadece GERÇEKTEN
+YENİ, listede olmayan bilgileri çıkar.
+
+------------------------------------------------
+
 Sadece aşağıdaki kategorileri kullan:
 
 - interests   (hobiler, oynadığı oyunlar, sevdiği aktiviteler/konular)
@@ -992,6 +1006,20 @@ Bu mesajdan İKİ farklı türde bilgi çıkaracaksın, TEK bir JSON cevapta:
 1) "self" — mesajı yazan kişinin KENDİSİ hakkında söylediği bilgiler.
 2) "targets" — mesajda etiketlenen şu kişiler hakkında söylenenler:
    {target_names}
+
+------------------------------------------------
+
+ZATEN BİLİNENLER (tekrar çıkarma, aşağıda):
+
+Mesajı yazan kişi hakkında zaten bilinenler:
+{self_known_info}
+
+Hedef kişiler hakkında zaten bilinenler:
+{targets_known_info}
+
+ÇOK ÖNEMLİ — TEKRAR ÇIKARMA: Yukarıdaki listelerde, ANLAM olarak
+(kelimeler farklı olsa bile) zaten var olan bir bilgiyi TEKRAR çıkarma.
+Sadece GERÇEKTEN YENİ, listede olmayan bilgileri çıkar.
 
 ------------------------------------------------
 
