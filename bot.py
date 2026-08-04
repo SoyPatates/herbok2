@@ -68,12 +68,17 @@ CATEGORY_LABELS = {
 }
 
 
-def build_profile_pages(profile):
+def build_profile_page_data(profile, max_entries_per_page=20, max_chars_per_page=1600):
     """
-    get_profile_detailed() ciktisindan, her satiri gercek DB id'siyle
-    birlikte gosteren, sayfalara bolunmus metin listesi uretir. Her
-    sayfa Discord'un 2000 karakter sinirinin altinda kalacak sekilde
-    bolunur.
+    get_profile_detailed() ciktisindan hem sayfa METNINI hem de o
+    sayfada gorunen (category, row_id, value) KAYITLARINI birlikte
+    dondurur -- boylece dropdown'daki secim listesi de sayfaya gore
+    guncellenebilir, sadece ilk 25 kayitla sinirli kalmaz.
+
+    Her sayfa en fazla max_entries_per_page kayit VEYA
+    max_chars_per_page karakter icerir (hangisi once dolarsa).
+
+    Donen: [{"text": "...", "entries": [(category, row_id, value), ...]}, ...]
     """
 
     header_lines = [
@@ -84,50 +89,63 @@ def build_profile_pages(profile):
         "",
     ]
 
-    body_lines = []
+    header_text = "\n".join(header_lines)
+    header_len = len(header_text) + 1
 
-    has_any = False
+    all_entries = []
 
     for category in ("interests", "projects", "preferences", "facts"):
+        for row_id, value in profile[category]:
+            all_entries.append((category, row_id, value))
 
-        entries = profile[category]
-
-        if not entries:
-            continue
-
-        has_any = True
-
-        body_lines.append(f"**{CATEGORY_LABELS[category]}:**")
-
-        for row_id, value in entries:
-            body_lines.append(f"`[{row_id}]` {value}")
-
-        body_lines.append("")
-
-    if not has_any:
-        body_lines.append(
-            "_Hiçbir interest/project/preference/fact kaydı yok._"
-        )
+    if not all_entries:
+        return [{
+            "text": header_text + "\n_Hiçbir interest/project/preference/"
+                    "fact kaydı yok._",
+            "entries": [],
+        }]
 
     pages = []
 
-    current = list(header_lines)
-    current_len = sum(len(l) + 1 for l in current)
+    current_lines = []
+    current_entries = []
+    current_len = header_len
+    current_category = None
 
-    for line in body_lines:
+    def flush():
+        text = header_text + "\n" + "\n".join(current_lines)
+        pages.append({"text": text, "entries": list(current_entries)})
+
+    for category, row_id, value in all_entries:
+
+        line = ""
+
+        if category != current_category:
+            line += f"**{CATEGORY_LABELS[category]}:**\n"
+
+        line += f"`[{row_id}]` {value}"
 
         line_len = len(line) + 1
 
-        if current_len + line_len > 1800 and len(current) > len(header_lines):
+        would_exceed_count = len(current_entries) >= max_entries_per_page
+        would_exceed_chars = current_len + line_len > max_chars_per_page
 
-            pages.append("\n".join(current))
-            current = list(header_lines)
-            current_len = sum(len(l) + 1 for l in current)
+        if current_entries and (would_exceed_count or would_exceed_chars):
+            flush()
+            current_lines = []
+            current_entries = []
+            current_len = header_len
+            current_category = None
 
-        current.append(line)
+            if category != current_category:
+                line = f"**{CATEGORY_LABELS[category]}:**\n`[{row_id}]` {value}"
+
+        current_lines.append(line)
+        current_entries.append((category, row_id, value))
         current_len += line_len
+        current_category = category
 
-    pages.append("\n".join(current))
+    flush()
 
     return pages
 
@@ -250,17 +268,18 @@ class AddEntryModal(discord.ui.Modal):
 class ProfileManagementView(discord.ui.View):
     """
     'bilgi <id>' ciktisina eklenen interaktif yonetim paneli:
-    - Dropdown ile bir kayit sec
+    - Onceki/Sonraki butonlariyla TUM kayitlar arasinda gezinilir
+    - Dropdown, o an gorunen SAYFADAKI kayitlari listeler
     - Duzenle / Sil / Ekle butonlari
     - Duzenleme ve ekleme gercek Discord formlariyla (modal) yapilir
 
-    Discord'un Select bileseni en fazla 25 secenek destekler, o
-    yuzden ilk 25 kayit gosterilir -- cok daha fazla kaydi olan bir
-    kullanici icin metin komutlariyla (sil/ekle/duzenle) devam
-    edilebilir.
+    Discord'un Select bileseni sayfa basina en fazla ~20 secenekle
+    sinirlandirildigi icin (bkz. build_profile_page_data), boylece
+    25 kayittan fazla kaydi olan kullanicilar da TUM kayitlarina
+    sayfalar arasinda gezinerek ulasabilir.
     """
 
-    def __init__(self, profile_manager, user_id, timeout=300):
+    def __init__(self, profile_manager, user_id, pages, timeout=300):
 
         super().__init__(timeout=timeout)
 
@@ -269,23 +288,24 @@ class ProfileManagementView(discord.ui.View):
         self.message = None
         self.selected = None
 
+        self.pages = pages
+        self.page_index = 0
+
         self._build_select()
         self._sync_button_states()
 
     # --------------------------------------------------
 
-    def _flatten_entries(self):
+    def current_page_text(self):
 
-        detailed = self.profile.get_profile_detailed(self.user_id)
+        total = len(self.pages)
 
-        entries = []
+        text = self.pages[self.page_index]["text"]
 
-        if detailed:
-            for category in ("interests", "projects", "preferences", "facts"):
-                for row_id, value in detailed[category]:
-                    entries.append((category, row_id, value))
+        if total > 1:
+            text += f"\n\n_Sayfa {self.page_index + 1}/{total}_"
 
-        return entries
+        return text
 
     # --------------------------------------------------
 
@@ -295,7 +315,7 @@ class ProfileManagementView(discord.ui.View):
             if isinstance(item, discord.ui.Select):
                 self.remove_item(item)
 
-        entries = self._flatten_entries()[:25]
+        entries = self.pages[self.page_index]["entries"]
 
         options = [
             discord.SelectOption(
@@ -368,29 +388,84 @@ class ProfileManagementView(discord.ui.View):
         self.edit_button.disabled = not has_selection
         self.delete_button.disabled = not has_selection
 
+        self.prev_button.disabled = self.page_index == 0
+        self.next_button.disabled = self.page_index >= len(self.pages) - 1
+
     # --------------------------------------------------
 
     async def refresh(self):
 
         self.selected = None
 
+        profile = self.profile.get_profile_detailed(self.user_id)
+
+        self.pages = build_profile_page_data(profile)
+
+        # Silme/ekleme sonrasi sayfa sayisi degismis olabilir, sinirin
+        # disina tasmayalim.
+        self.page_index = min(self.page_index, len(self.pages) - 1)
+
         self._build_select()
         self._sync_button_states()
 
         if self.message:
+            await self.message.edit(
+                content=self.current_page_text(),
+                view=self,
+            )
 
-            profile = self.profile.get_profile_detailed(self.user_id)
+    # --------------------------------------------------
 
-            content = build_profile_pages(profile)[0]
+    @discord.ui.button(
+        label="◀ Önceki",
+        style=discord.ButtonStyle.secondary,
+        row=1,
+    )
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
 
-            await self.message.edit(content=content, view=self)
+        if not await self._check_authorized(interaction):
+            return
+
+        self.page_index = max(0, self.page_index - 1)
+        self.selected = None
+
+        self._build_select()
+        self._sync_button_states()
+
+        await interaction.response.edit_message(
+            content=self.current_page_text(),
+            view=self,
+        )
+
+    # --------------------------------------------------
+
+    @discord.ui.button(
+        label="Sonraki ▶",
+        style=discord.ButtonStyle.secondary,
+        row=1,
+    )
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        if not await self._check_authorized(interaction):
+            return
+
+        self.page_index = min(len(self.pages) - 1, self.page_index + 1)
+        self.selected = None
+
+        self._build_select()
+        self._sync_button_states()
+
+        await interaction.response.edit_message(
+            content=self.current_page_text(),
+            view=self,
+        )
 
     # --------------------------------------------------
 
     @discord.ui.button(
         label="✏️ Düzenle",
         style=discord.ButtonStyle.primary,
-        row=1,
+        row=2,
     )
     async def edit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
 
@@ -406,7 +481,7 @@ class ProfileManagementView(discord.ui.View):
 
         category, row_id = self.selected
 
-        entries = self._flatten_entries()
+        entries = self.pages[self.page_index]["entries"]
 
         current = next(
             (v for c, r, v in entries if c == category and r == row_id),
@@ -422,7 +497,7 @@ class ProfileManagementView(discord.ui.View):
     @discord.ui.button(
         label="🗑️ Sil",
         style=discord.ButtonStyle.danger,
-        row=1,
+        row=2,
     )
     async def delete_button(self, interaction: discord.Interaction, button: discord.ui.Button):
 
@@ -452,7 +527,7 @@ class ProfileManagementView(discord.ui.View):
     @discord.ui.button(
         label="➕ Ekle",
         style=discord.ButtonStyle.success,
-        row=1,
+        row=2,
     )
     async def add_button(self, interaction: discord.Interaction, button: discord.ui.Button):
 
@@ -1039,19 +1114,11 @@ class HerbokologBot(commands.Bot):
             )
             return
 
-        pages = build_profile_pages(profile)
+        pages = build_profile_page_data(profile)
 
-        content = pages[0]
+        view = ProfileManagementView(self.profile, user_id, pages)
 
-        if len(pages) > 1:
-            content += (
-                f"\n\n_(Toplam {len(pages)} sayfa var, ama aşağıdaki "
-                "yönetim menüsü ilk 25 kaydı gösterir. Metin "
-                "komutlarıyla (`sil`/`ekle`/`düzenle`) diğerlerine "
-                "de ulaşabilirsin.)_"
-            )
-
-        view = ProfileManagementView(self.profile, user_id)
+        content = view.current_page_text()
 
         sent = await message.reply(
             content,
