@@ -143,8 +143,33 @@ class OpenRouterManager:
             except Exception as error:
                 last_error = error
 
+                logger.warning(
+                    "chat_completions_create: key #%d basarisiz "
+                    "(model=%s). Hata turu: %s. Mesaj: %s",
+                    idx,
+                    model_name,
+                    type(error).__name__,
+                    str(error)[:500],
+                )
+
                 if not self._should_rotate(error):
+                    logger.error(
+                        "chat_completions_create: hata rotasyon "
+                        "gerektirmiyor (key ile alakasiz), direkt "
+                        "firlatiliyor. Hata turu: %s",
+                        type(error).__name__,
+                    )
                     raise
+
+        logger.error(
+            "chat_completions_create: TUM anahtarlar (%d adet) "
+            "denendi, hepsi basarisiz oldu (model=%s). Son hata: "
+            "%s: %s",
+            len(self.api_keys),
+            model_name,
+            type(last_error).__name__ if last_error else "bilinmiyor",
+            str(last_error)[:500] if last_error else "",
+        )
 
         raise AllKeysExhaustedError() from last_error
 
