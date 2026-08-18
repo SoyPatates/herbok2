@@ -1,4 +1,5 @@
 import time
+import unicodedata
 
 from openai import (
     OpenAI,
@@ -36,14 +37,37 @@ class EmptyModelResponseError(Exception):
         )
 
 
+class CorruptedModelResponseError(Exception):
+    """
+    Model, hata fırlatmadan ve bos da olmayan ama ICERIGI anlamsiz/
+    bozuk (yabanci alfabelerden rastgele karakterler, kelime icine
+    sikismis rastgele harf dizileri gibi) bir cevap dondurdugunde
+    firlatilir. Bu da genelde ucretsiz modelin o an saglikli
+    calismadigi bir ana isaret eder -- key sorunu degildir.
+    """
+
+    def __init__(self, model: str = ""):
+        super().__init__(
+            f"Model ({model or 'bilinmeyen'}) bozuk/anlamsız karakterler "
+            "içeren bir cevap döndürdü, muhtemelen o an sağlıksız "
+            "çalışıyor. Tekrar denemen gerekebilir."
+        )
+
+
 class OpenRouterManager:
 
     BASE_URL = "https://openrouter.ai/api/v1"
 
-    # Bos cevap (EmptyModelResponseError) icin, AYNI anahtarla kac kez
-    # ve kac saniye arayla tekrar denenecegi.
+    # Bos/bozuk cevap icin, AYNI anahtarla kac kez ve kac saniye
+    # arayla tekrar denenecegi.
     EMPTY_RESPONSE_RETRIES = 2
     EMPTY_RESPONSE_DELAY = 1.5
+
+    # Bir cevabin "bozuk" sayilmasi icin gereken supheli (beklenmeyen
+    # alfabeden) karakter sayisi esigi. Not: bazi alfabelerde (orn.
+    # Devanagari) sesli isaretleri Python'da "harf" sayilmiyor, bu
+    # yuzden esik dusuk tutuluyor.
+    CORRUPTION_THRESHOLD = 2
 
     def __init__(self, api_keys: list[str]):
         if not api_keys:
@@ -60,9 +84,9 @@ class OpenRouterManager:
 
     def _should_rotate(self, error: Exception) -> bool:
 
-        if isinstance(error, EmptyModelResponseError):
+        if isinstance(error, (EmptyModelResponseError, CorruptedModelResponseError)):
             # Ayni key ile birkac kez denendi (_create_with_retry
-            # icinde), hala bos donuyorsa artik bir sonraki key'e
+            # icinde), hala sorunluysa artik bir sonraki key'e
             # gecmeyi deneyebiliriz -- key farkli bir OpenRouter
             # saglayicisina yonlendirebilir, tamamen imkansiz degil.
             return True
@@ -87,15 +111,59 @@ class OpenRouterManager:
 
         return any(keyword in msg for keyword in keywords)
 
+    def _looks_corrupted(self, text: str) -> bool:
+        """
+        Cevabin icinde, Turkce/Discord sohbeti icin beklenmeyen
+        alfabelerden (Devanagari, Kiril, CJK, Tay vb.) gelen karakterler
+        varsa, bu genelde modelin o an bozuk/rastgele token urettigini
+        gosterir (orn. "vaşیlan", "punyaie" gibi anlamsiz karisimlar).
+
+        Latin harfler (Turkce dahil), rakamlar, yaygin noktalama ve
+        emoji serbesttir. Esik degerinden fazla "yabanci" harf varsa
+        cevap bozuk sayilir.
+        """
+
+        suspicious = 0
+
+        for ch in text:
+
+            if ch.isspace() or ch.isdigit():
+                continue
+
+            if not ch.isalpha():
+                continue
+
+            code_point = ord(ch)
+
+            # Yaygin emoji araliklarini gormezden gel.
+            if 0x1F000 <= code_point <= 0x1FFFF or 0x2600 <= code_point <= 0x27BF:
+                continue
+
+            try:
+                name = unicodedata.name(ch)
+            except ValueError:
+                continue
+
+            if "LATIN" in name:
+                continue
+
+            suspicious += 1
+
+            if suspicious >= self.CORRUPTION_THRESHOLD:
+                return True
+
+        return False
+
     def _create_with_retry(self, client, kwargs, model_name):
         """
         client.chat.completions.create(**kwargs) cagirir. Eger model
-        bos/gecersiz bir cevap (choices yok) donerse, AYNI anahtarla
-        kisa bir bekleme sonrasi birkac kez daha dener -- bu genelde
-        ucretsiz modelin gecici bir kapasite sorunu yasadigi anlamina
-        gelir, cogu zaman 1-2 saniye icinde duzelir.
+        bos/gecersiz (choices yok) ya da BOZUK/anlamsiz karakterler
+        iceren bir cevap donerse, AYNI anahtarla kisa bir bekleme
+        sonrasi birkac kez daha dener -- bu genelde ucretsiz modelin
+        gecici bir kapasite/saglik sorunu yasadigi anlamina gelir,
+        cogu zaman 1-2 saniye icinde duzelir.
 
-        Tum denemeler de bos donerse EmptyModelResponseError firlatir.
+        Tum denemeler de basarisizsa ilgili hatayi firlatir.
         """
 
         last_error = None
@@ -104,21 +172,45 @@ class OpenRouterManager:
 
             result = client.chat.completions.create(**kwargs)
 
-            if getattr(result, "choices", None):
-                return result
+            if not getattr(result, "choices", None):
 
-            logger.warning(
-                "chat_completions_create: model=%s bos/None choices "
-                "dondurdu (deneme %d/%d, ayni key).",
-                model_name,
-                attempt,
-                self.EMPTY_RESPONSE_RETRIES + 1,
-            )
+                logger.warning(
+                    "chat_completions_create: model=%s bos/None choices "
+                    "dondurdu (deneme %d/%d, ayni key).",
+                    model_name,
+                    attempt,
+                    self.EMPTY_RESPONSE_RETRIES + 1,
+                )
 
-            last_error = EmptyModelResponseError(model_name)
+                last_error = EmptyModelResponseError(model_name)
 
-            if attempt <= self.EMPTY_RESPONSE_RETRIES:
-                time.sleep(self.EMPTY_RESPONSE_DELAY)
+                if attempt <= self.EMPTY_RESPONSE_RETRIES:
+                    time.sleep(self.EMPTY_RESPONSE_DELAY)
+
+                continue
+
+            content = result.choices[0].message.content or ""
+
+            if self._looks_corrupted(content):
+
+                logger.warning(
+                    "chat_completions_create: model=%s bozuk/anlamsiz "
+                    "karakterler iceren bir cevap dondurdu (deneme "
+                    "%d/%d, ayni key). Ilk 200 karakter: %r",
+                    model_name,
+                    attempt,
+                    self.EMPTY_RESPONSE_RETRIES + 1,
+                    content[:200],
+                )
+
+                last_error = CorruptedModelResponseError(model_name)
+
+                if attempt <= self.EMPTY_RESPONSE_RETRIES:
+                    time.sleep(self.EMPTY_RESPONSE_DELAY)
+
+                continue
+
+            return result
 
         raise last_error
 
