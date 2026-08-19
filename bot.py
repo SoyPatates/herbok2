@@ -1344,16 +1344,63 @@ class HerbokologBot(commands.Bot):
 
     # --------------------------------------------------
 
+    def _split_for_discord(self, text, limit=1900):
+        """
+        Discord tek mesajda en fazla 2000 karakter kabul eder (error
+        code 50035 bunun asilmasindan geliyor). Metni, mumkun oldugunca
+        satir/kelime sinirindan bolerek limit alti parcalara ayirir.
+        """
+
+        if len(text) <= limit:
+            return [text]
+
+        chunks = []
+        remaining = text
+
+        while len(remaining) > limit:
+
+            split_at = remaining.rfind("\n", 0, limit)
+
+            if split_at == -1 or split_at < limit * 0.5:
+                split_at = remaining.rfind(" ", 0, limit)
+
+            if split_at == -1 or split_at < limit * 0.5:
+                split_at = limit
+
+            chunk = remaining[:split_at].rstrip()
+
+            if chunk:
+                chunks.append(chunk)
+
+            remaining = remaining[split_at:].lstrip()
+
+        if remaining:
+            chunks.append(remaining)
+
+        return chunks
+
+    # --------------------------------------------------
+
     async def send_response(
         self,
         message,
         response,
     ):
 
-        await message.reply(
-            response,
-            mention_author=False,
-        )
+        chunks = self._split_for_discord(response)
+
+        first = True
+
+        for chunk in chunks:
+
+            if first:
+                await message.reply(
+                    chunk,
+                    mention_author=False,
+                )
+                first = False
+            else:
+                await message.channel.send(chunk)
 
     # --------------------------------------------------
 
