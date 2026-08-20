@@ -1,4 +1,5 @@
 import time
+import re
 import unicodedata
 
 from openai import (
@@ -152,7 +153,47 @@ class OpenRouterManager:
             if suspicious >= self.CORRUPTION_THRESHOLD:
                 return True
 
+        if self._has_special_token_leak(text):
+            return True
+
+        if self._has_degenerate_repetition(text):
+            return True
+
         return False
+
+    # Model tokenizer'ina ait, kullaniciya ASLA gorunmemesi gereken
+    # ozel/kontrol tokenlari. Bunlardan biri cevapta gecerse, model
+    # o an bozuk/hatali calisiyor demektir (orn. "<pad>" binlerce kez
+    # tekrarlanan bir cevap).
+    SPECIAL_TOKEN_MARKERS = (
+        "<pad>", "[pad]", "<|pad|>",
+        "<|endoftext|>",
+        "<|im_start|>", "<|im_end|>",
+        "<|assistant|>", "<|user|>", "<|system|>",
+        "<unk>", "[unk]",
+    )
+
+    def _has_special_token_leak(self, text: str) -> bool:
+
+        lowered = text.lower()
+
+        return any(
+            marker in lowered
+            for marker in self.SPECIAL_TOKEN_MARKERS
+        )
+
+    def _has_degenerate_repetition(self, text: str) -> bool:
+        """
+        Model bazen (ozellikle kucuk/ucretsiz modellerde) bir "dongu"ye
+        girip ayni kisa kalibi (bir kelime, bir token, bir noktalama
+        grubu) onlarca/yuzlerce kez ust uste tekrarlayan bozuk bir
+        cevap uretebilir. Bu, 2-40 karakterlik bir kalibin en az 8 kez
+        ust uste tekrarlanip tekrarlanmadigina bakarak yakalanir.
+        """
+
+        pattern = re.compile(r"(.{2,40}?)\1{7,}", re.DOTALL)
+
+        return bool(pattern.search(text))
 
     def _create_with_retry(self, client, kwargs, model_name):
         """
