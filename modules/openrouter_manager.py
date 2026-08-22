@@ -87,7 +87,17 @@ class OpenRouterManager:
     # FALLBACK_MODELS = {
     #     "google/gemma-4-26b-a4b-it:free": "meta-llama/llama-3.3-70b-instruct:free",
     # }
-    FALLBACK_MODELS: dict[str, str] = {}
+    FALLBACK_MODELS: dict[str, str] = {
+        # Ana sohbet modeli tukenirse (google/gemma-4-26b-a4b-it:free
+        # zaten paylasimli havuz doldugu icin degistirildi -- bkz.
+        # ai.py CHAT_MODEL), farkli bir saglayiciya bagli bu modele
+        # gecilir. 2026-08 itibariyle guncel ve ucretsiz.
+        "openai/gpt-oss-20b:free": "nvidia/nemotron-3-nano-30b-a3b:free",
+
+        # Eski model hala bir yerde kullaniliyorsa (kodda unutulmus
+        # bir referans varsa) o da otomatik yonlendirilsin.
+        "google/gemma-4-26b-a4b-it:free": "openai/gpt-oss-20b:free",
+    }
 
     def __init__(self, api_keys: list[str]):
         if not api_keys:
