@@ -70,6 +70,25 @@ class OpenRouterManager:
     # yuzden esik dusuk tutuluyor.
     CORRUPTION_THRESHOLD = 2
 
+    # Tum anahtarlar "upstream_provider_shared_pool" tipi (yani key/
+    # hesap sorunu DEGIL, modelin saglayicidaki -orn. Google AI Studio-
+    # TUM OpenRouter kullanicilari arasinda PAYLASILAN ucretsiz havuzu
+    # o an dolu) bir hatayla basarisiz olursa, bu genelde saniyeler/
+    # birkac dakika icinde kendiliginden acilir. Bu yuzden pes etmeden
+    # once bu kadar saniye bekleyip TUM anahtarlari bir kez daha
+    # deneriz.
+    SHARED_POOL_RETRY_DELAY = 8
+
+    # Ana model tukendiginde (butun anahtarlar + ekstra tur basarisiz
+    # olursa) denenecek yedek model. Varsayilan bos -- yedek istemiyorsan
+    # boyle birak. Ucretsiz model listesi surekli degistigi icin burada
+    # sabit bir tahmin yazmiyoruz; openrouter.ai/models adresinden GUNCEL
+    # bir model ID'si secip kendin doldurabilirsin. Ornek:
+    # FALLBACK_MODELS = {
+    #     "google/gemma-4-26b-a4b-it:free": "meta-llama/llama-3.3-70b-instruct:free",
+    # }
+    FALLBACK_MODELS: dict[str, str] = {}
+
     def __init__(self, api_keys: list[str]):
         if not api_keys:
             raise RuntimeError("OPENROUTER_API_KEYS boş.")
@@ -111,6 +130,23 @@ class OpenRouterManager:
         )
 
         return any(keyword in msg for keyword in keywords)
+
+    def _is_shared_pool_limit(self, error: Exception) -> bool:
+        """
+        OpenRouter'in 429 hatasinda dondurdugu 'limit_source':
+        'upstream_provider_shared_pool' -- yani bu bir key/hesap
+        sorunu degil, modelin saglayicidaki (orn. Google AI Studio)
+        TUM OpenRouter kullanicilari arasinda paylasilan ucretsiz
+        havuzunun o an dolu olmasi. Anahtar rotasyonu bunu COZMEZ
+        (hepsi ayni havuza gider) ama genelde kisa surede acilir.
+        """
+
+        msg = str(error).lower()
+
+        return (
+            "shared_pool" in msg
+            or "temporarily rate-limited upstream" in msg
+        )
 
     def _looks_corrupted(self, text: str) -> bool:
         """
@@ -255,56 +291,114 @@ class OpenRouterManager:
 
         raise last_error
 
-    def chat_completions_create(self, **kwargs):
+    def _attempt_all_keys(self, **kwargs):
+        """
+        Verilen model icin butun anahtarlari sirayla dener. Eger hepsi
+        "paylasimli havuz dolu" hatasiyla basarisiz olursa, pes etmeden
+        once SHARED_POOL_RETRY_DELAY kadar bekleyip TUM anahtarlari bir
+        kez daha (ikinci bir tur) dener -- bu tip hatalar genelde cok
+        kisa surelidir.
+        """
+
         last_error = None
         model_name = kwargs.get("model", "")
 
-        for i in range(len(self.api_keys)):
-            idx = (self.current_index + i) % len(self.api_keys)
+        for pass_num in range(2):
 
-            try:
-                client = OpenAI(
-                    api_key=self.api_keys[idx],
-                    base_url=self.BASE_URL,
-                )
+            for i in range(len(self.api_keys)):
+                idx = (self.current_index + i) % len(self.api_keys)
 
-                result = self._create_with_retry(client, kwargs, model_name)
+                try:
+                    client = OpenAI(
+                        api_key=self.api_keys[idx],
+                        base_url=self.BASE_URL,
+                    )
 
-                self.current_index = idx
-                return result
+                    result = self._create_with_retry(client, kwargs, model_name)
 
-            except Exception as error:
-                last_error = error
+                    self.current_index = idx
+                    return result
+
+                except Exception as error:
+                    last_error = error
+
+                    logger.warning(
+                        "chat_completions_create: key #%d basarisiz "
+                        "(model=%s, tur=%d). Hata turu: %s. Mesaj: %s",
+                        idx,
+                        model_name,
+                        pass_num + 1,
+                        type(error).__name__,
+                        str(error)[:500],
+                    )
+
+                    if not self._should_rotate(error):
+                        logger.error(
+                            "chat_completions_create: hata rotasyon "
+                            "gerektirmiyor (key ile alakasiz), direkt "
+                            "firlatiliyor. Hata turu: %s",
+                            type(error).__name__,
+                        )
+                        raise
+
+            if pass_num == 0 and self._is_shared_pool_limit(last_error):
 
                 logger.warning(
-                    "chat_completions_create: key #%d basarisiz "
-                    "(model=%s). Hata turu: %s. Mesaj: %s",
-                    idx,
+                    "chat_completions_create: tum anahtarlar paylasimli "
+                    "havuz limitine takildi (model=%s). %d saniye "
+                    "bekleyip tum anahtarlari bir kez daha deneyecegim.",
                     model_name,
-                    type(error).__name__,
-                    str(error)[:500],
+                    self.SHARED_POOL_RETRY_DELAY,
                 )
 
-                if not self._should_rotate(error):
-                    logger.error(
-                        "chat_completions_create: hata rotasyon "
-                        "gerektirmiyor (key ile alakasiz), direkt "
-                        "firlatiliyor. Hata turu: %s",
-                        type(error).__name__,
-                    )
-                    raise
+                time.sleep(self.SHARED_POOL_RETRY_DELAY)
+
+                continue
+
+            break
 
         logger.error(
-            "chat_completions_create: TUM anahtarlar (%d adet) "
+            "chat_completions_create: TUM anahtarlar (%d adet, %d tur) "
             "denendi, hepsi basarisiz oldu (model=%s). Son hata: "
             "%s: %s",
             len(self.api_keys),
+            pass_num + 1,
             model_name,
             type(last_error).__name__ if last_error else "bilinmiyor",
             str(last_error)[:500] if last_error else "",
         )
 
         raise AllKeysExhaustedError() from last_error
+
+    def chat_completions_create(self, **kwargs):
+
+        try:
+            return self._attempt_all_keys(**kwargs)
+
+        except AllKeysExhaustedError as primary_error:
+
+            fallback_model = self.FALLBACK_MODELS.get(kwargs.get("model"))
+
+            if not fallback_model:
+                raise
+
+            logger.warning(
+                "chat_completions_create: ana model (%s) tukendi, "
+                "yedek modele geciliyor: %s",
+                kwargs.get("model"),
+                fallback_model,
+            )
+
+            fallback_kwargs = dict(kwargs)
+            fallback_kwargs["model"] = fallback_model
+
+            try:
+                return self._attempt_all_keys(**fallback_kwargs)
+
+            except AllKeysExhaustedError:
+                # Yedek de basarisizsa, orijinal (ana model) hatasini
+                # firlat -- kullaniciya daha dogru/tutarli bir mesaj.
+                raise primary_error
 
 
 manager = OpenRouterManager(OPENROUTER_API_KEYS)
