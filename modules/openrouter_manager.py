@@ -88,15 +88,18 @@ class OpenRouterManager:
     #     "google/gemma-4-26b-a4b-it:free": "meta-llama/llama-3.3-70b-instruct:free",
     # }
     FALLBACK_MODELS: dict[str, str] = {
-        # Ana sohbet modeli tukenirse (google/gemma-4-26b-a4b-it:free
-        # zaten paylasimli havuz doldugu icin degistirildi -- bkz.
-        # ai.py CHAT_MODEL), farkli bir saglayiciya bagli bu modele
-        # gecilir. 2026-08 itibariyle guncel ve ucretsiz.
-        "openai/gpt-oss-20b:free": "nvidia/nemotron-3-nano-30b-a3b:free",
+        # Ana sohbet modeli artik "openrouter/free" -- OpenRouter'in
+        # KENDISI o an calisan bir ucretsiz modeli otomatik seciyor,
+        # bu yuzden normalde belirli bir model ID'sinin tukenmesi/
+        # ucretli hale gelmesi artik bizi etkilemiyor. Yine de router'in
+        # kendisi (nadiren) basarisiz olursa, somut bir modele son bir
+        # sans olarak dusulsun.
+        "openrouter/free": "nvidia/nemotron-3-nano-30b-a3b:free",
 
-        # Eski model hala bir yerde kullaniliyorsa (kodda unutulmus
-        # bir referans varsa) o da otomatik yonlendirilsin.
-        "google/gemma-4-26b-a4b-it:free": "openai/gpt-oss-20b:free",
+        # Eski sabit model adlari kodda bir yerde unutulmus olabilir --
+        # onlar da otomatik yonlendirici modele dussun.
+        "google/gemma-4-26b-a4b-it:free": "openrouter/free",
+        "openai/gpt-oss-20b:free": "openrouter/free",
     }
 
     def __init__(self, api_keys: list[str]):

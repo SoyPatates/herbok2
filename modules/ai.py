@@ -7,7 +7,7 @@ from modules.config import (
 from modules.openrouter_manager import manager
 from modules.logger import logger
 
-CHAT_MODEL = "openai/gpt-oss-20b:free"
+CHAT_MODEL = "openrouter/free"
 VISION_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
 
 EMPTY_CATEGORY_DICT = {
