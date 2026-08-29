@@ -46,7 +46,7 @@ MAX_HISTORY = 20
 # ==========================
 
 TEMPERATURE = 0.7
-MAX_OUTPUT_TOKENS = 1024
+MAX_OUTPUT_TOKENS = 2048
 
 # ==========================
 # OpenRouter
