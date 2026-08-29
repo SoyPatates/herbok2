@@ -279,7 +279,26 @@ class OpenRouterManager:
 
                 continue
 
-            content = result.choices[0].message.content or ""
+            raw_content = result.choices[0].message.content
+
+            if raw_content is None:
+
+                logger.warning(
+                    "chat_completions_create: model=%s None icerik "
+                    "dondurdu (deneme %d/%d, ayni key).",
+                    model_name,
+                    attempt,
+                    self.EMPTY_RESPONSE_RETRIES + 1,
+                )
+
+                last_error = EmptyModelResponseError(model_name)
+
+                if attempt <= self.EMPTY_RESPONSE_RETRIES:
+                    time.sleep(self.EMPTY_RESPONSE_DELAY)
+
+                continue
+
+            content = raw_content
 
             if self._looks_corrupted(content):
 
