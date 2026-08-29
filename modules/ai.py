@@ -373,4 +373,4 @@ class AIClient:
             messages=messages,
             model=VISION_MODEL,
             timeout=60,
-        )
+        ) 
