@@ -31,7 +31,7 @@ class AIClient:
         model: str = CHAT_MODEL,
         max_tokens: int = MAX_OUTPUT_TOKENS,
         temperature: float = TEMPERATURE,
-        timeout: int = 30,
+        timeout: int = 25,
     ) -> str:
 
         response = self.manager.chat_completions_create(

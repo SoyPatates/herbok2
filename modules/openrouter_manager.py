@@ -4,6 +4,7 @@ import unicodedata
 
 from openai import (
     OpenAI,
+    APITimeoutError,
     APIStatusError,
     RateLimitError,
     AuthenticationError,
@@ -124,6 +125,7 @@ class OpenRouterManager:
         return OpenAI(
             api_key=self.api_keys[self.current_index],
             base_url=self.BASE_URL,
+            max_retries=0,
         )
 
     def _should_rotate(self, error: Exception) -> bool:
@@ -355,6 +357,7 @@ class OpenRouterManager:
                     client = OpenAI(
                         api_key=self.api_keys[idx],
                         base_url=self.BASE_URL,
+                        max_retries=0,
                     )
 
                     result = self._create_with_retry(client, kwargs, model_name)
@@ -374,6 +377,14 @@ class OpenRouterManager:
                         type(error).__name__,
                         str(error)[:500],
                     )
+
+                    if isinstance(error, APITimeoutError):
+                        # Model yanit vermiyor (key sorunu degil):
+                        # diger key'leri/turlari beklemeden yedek
+                        # modele gec.
+                        raise ModelUnavailableError(
+                            model_name, "zaman aşımı"
+                        ) from error
 
                     if (
                         isinstance(error, APIStatusError)
