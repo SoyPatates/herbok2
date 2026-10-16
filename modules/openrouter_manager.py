@@ -105,8 +105,12 @@ class OpenRouterManager:
     # adresinden kontrol et; ID'si olmayan/404 veren bir model olursa
     # bot artik cokmez, sadece o modeli atlar.
     FALLBACK_MODELS: dict[str, str] = {
-        "nvidia/nemotron-3-ultra-550b-a55b:free": "nvidia/nemotron-3.5-super-vl:free",
-        "google/gemma-4-26b-a4b-it:free": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        # Sohbet modeli
+        "nvidia/nemotron-3-ultra-550b-a55b:free": "nvidia/nemotron-3-super-120b-a12b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free": "poolside/laguna-s-2.1:free",
+        # Gorsel (vision) modeli -- yedek de gorsel destekli olmali
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free": "nvidia/nemotron-3.5-super-vl:free",
+        "nvidia/nemotron-3.5-super-vl:free": "thinkingmachines/inkling:free",
     }
 
     def __init__(self, api_keys: list[str]):
