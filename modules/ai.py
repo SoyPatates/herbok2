@@ -7,7 +7,7 @@ from modules.config import (
 from modules.openrouter_manager import manager
 from modules.logger import logger
 
-CHAT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
+CHAT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 VISION_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
 
 EMPTY_CATEGORY_DICT = {
