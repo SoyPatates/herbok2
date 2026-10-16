@@ -21,6 +21,19 @@ class AllKeysExhaustedError(Exception):
         super().__init__("Patates adamın parası bitti")
 
 
+class ModelUnavailableError(Exception):
+    """
+    OpenRouter 404 dondurdugunde firlatilir (model ID'si artik yok ya
+    da artik ucretsiz degil). Key sorunu degildir, key rotasyonu
+    cozmez; sadece yedek modele gecmek mantiklidir.
+    """
+
+    def __init__(self, model: str = "", detail: str = ""):
+        super().__init__(
+            f"Model ({model or 'bilinmeyen'}) kullanılamıyor (404): {detail}"
+        )
+
+
 class EmptyModelResponseError(Exception):
     """
     Model API'den hata fırlatmadan ama icerik olmadan (choices bos/None)
@@ -87,8 +100,12 @@ class OpenRouterManager:
     # FALLBACK_MODELS = {
     #     "google/gemma-4-26b-a4b-it:free": "meta-llama/llama-3.3-70b-instruct:free",
     # }
+    # NOT: "openai/gpt-oss-120b:free" artik ucretsiz degil (404), bu
+    # yuzden kaldirildi. Model ID'lerini openrouter.ai/models?q=free
+    # adresinden kontrol et; ID'si olmayan/404 veren bir model olursa
+    # bot artik cokmez, sadece o modeli atlar.
     FALLBACK_MODELS: dict[str, str] = {
-        "nvidia/nemotron-3-ultra-550b-a55b:free": "openai/gpt-oss-120b:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free": "nvidia/nemotron-3.5-super-vl:free",
         "google/gemma-4-26b-a4b-it:free": "nvidia/nemotron-3-ultra-550b-a55b:free",
     }
 
@@ -354,6 +371,14 @@ class OpenRouterManager:
                         str(error)[:500],
                     )
 
+                    if (
+                        isinstance(error, APIStatusError)
+                        and error.status_code == 404
+                    ):
+                        raise ModelUnavailableError(
+                            model_name, str(error)[:300]
+                        ) from error
+
                     if not self._should_rotate(error):
                         logger.error(
                             "chat_completions_create: hata rotasyon "
@@ -397,7 +422,7 @@ class OpenRouterManager:
         try:
             return self._attempt_all_keys(**kwargs)
 
-        except AllKeysExhaustedError as primary_error:
+        except (AllKeysExhaustedError, ModelUnavailableError) as primary_error:
 
             fallback_model = self.FALLBACK_MODELS.get(kwargs.get("model"))
 
@@ -417,7 +442,7 @@ class OpenRouterManager:
             try:
                 return self._attempt_all_keys(**fallback_kwargs)
 
-            except AllKeysExhaustedError:
+            except (AllKeysExhaustedError, ModelUnavailableError):
                 # Yedek de basarisizsa, orijinal (ana model) hatasini
                 # firlat -- kullaniciya daha dogru/tutarli bir mesaj.
                 raise primary_error
