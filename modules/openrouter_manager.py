@@ -128,6 +128,24 @@ class OpenRouterManager:
             max_retries=0,
         )
 
+    def _is_provider_failure(self, error: Exception) -> bool:
+        """Saglayici tarafli model hatasi: 5xx ya da 400 + 'Provider returned error'/'degraded'."""
+
+        if not isinstance(error, APIStatusError):
+            return False
+
+        if error.status_code in (500, 502, 504):
+            return True
+
+        if error.status_code == 400:
+            msg = str(error).lower()
+            return (
+                "provider returned error" in msg
+                or "degraded" in msg
+            )
+
+        return False
+
     def _should_rotate(self, error: Exception) -> bool:
 
         if isinstance(error, (EmptyModelResponseError, CorruptedModelResponseError)):
@@ -384,6 +402,14 @@ class OpenRouterManager:
                         # modele gec.
                         raise ModelUnavailableError(
                             model_name, "zaman aşımı"
+                        ) from error
+
+                    if self._is_provider_failure(error):
+                        # Saglayici (orn. Nvidia) modeli "DEGRADED"/
+                        # hatali donduruyor: key sorunu degil, yedek
+                        # modele gec.
+                        raise ModelUnavailableError(
+                            model_name, str(error)[:300]
                         ) from error
 
                     if (
