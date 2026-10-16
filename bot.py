@@ -3,6 +3,7 @@ from discord.ext import commands
 from modules.preview import PreviewGenerator
 from PIL import Image
 
+import asyncio
 import io
 import re
 import aiohttp
@@ -783,7 +784,8 @@ class HerbokologBot(commands.Bot):
                 targets_known,
             )
 
-            combined = self.ai.extract_combined_profile_info(
+            combined = await asyncio.to_thread(
+                self.ai.extract_combined_profile_info,
                 prompt,
                 combined_prompt,
                 target_names,
@@ -801,7 +803,8 @@ class HerbokologBot(commands.Bot):
                 self_known,
             )
 
-            self_extracted = self.ai.extract_profile_info(
+            self_extracted = await asyncio.to_thread(
+                self.ai.extract_profile_info,
                 prompt,
                 self_prompt,
             )
@@ -964,7 +967,7 @@ class HerbokologBot(commands.Bot):
             }
         )
 
-        response = self.ai.chat(messages)
+        response = await asyncio.to_thread(self.ai.chat, messages)
 
         self.memory.add(
             message.channel.id,
@@ -1283,7 +1286,8 @@ class HerbokologBot(commands.Bot):
                 )
                 return
 
-            response = self.ai.compare_images(
+            response = await asyncio.to_thread(
+                self.ai.compare_images,
                 attachments[0].url,
                 attachments[1].url,
                 prompt,
@@ -1292,7 +1296,8 @@ class HerbokologBot(commands.Bot):
         # Tek görsel analizi
         else:
 
-            response = self.ai.analyze_image_url(
+            response = await asyncio.to_thread(
+                self.ai.analyze_image_url,
                 attachments[0].url,
                 prompt,
             )
@@ -1319,8 +1324,9 @@ class HerbokologBot(commands.Bot):
                 "tepki ver. Teknik/tasarım analizi yapma, puan verme."
             )
 
-        response = self.ai.analyze_image_with_context(
-            attachments[0].url,
+        response = await asyncio.to_thread(
+                self.ai.analyze_image_with_context,
+                attachments[0].url,
             CASUAL_IMAGE_PROMPT,
             user_text,
         )
