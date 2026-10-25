@@ -956,7 +956,20 @@ class HerbokologBot(commands.Bot):
             messages.append(
                 {
                     "role": "system",
-                    "content": "Son konuşmalar:\n" + history,
+                    "content": (
+                        "Son konuşmalar:\n" + history
+                        + "\n\nŞU AN SANA YAZAN KİŞİ: "
+                        + message.author.display_name
+                        + ". Yukarıdaki konuşmalarda başka biri "
+                        "kendisiyle ilgili bir şey söylediyse (sınavı "
+                        "var, hasta, planı var, moral durumu vb.) bu "
+                        "O KİŞİYE aittir. "
+                        + message.author.display_name
+                        + " bunu kendisi söylemediyse ona 'senin "
+                        "sınavın var' gibi sahiplenerek söyleme. "
+                        "Başkasının durumundan sadece o kişi hakkında "
+                        "konuşuluyor/soruluyorsa, onun adıyla bahset."
+                    ),
                 }
             )
 
