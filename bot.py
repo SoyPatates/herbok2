@@ -667,6 +667,40 @@ class HerbokologBot(commands.Bot):
 
     # --------------------------------------------------
 
+    async def get_reply_context(self, message):
+        """
+        Mesaj bir reply ise, cevap verilen mesajin yazarini ve
+        (kisaltilmis) icerigini doner: (yazar_adi, metin). Reply
+        degilse ya da mesaj bulunamazsa None doner.
+        """
+
+        if message.reference is None:
+            return None
+
+        replied = message.reference.resolved
+
+        if replied is None or isinstance(
+            replied, discord.DeletedReferencedMessage
+        ):
+            try:
+                replied = await message.channel.fetch_message(
+                    message.reference.message_id
+                )
+            except (discord.NotFound, discord.HTTPException):
+                return None
+
+        text = (replied.clean_content or "").strip()
+
+        if not text:
+            text = "(görsel/ek)" if replied.attachments else "(boş mesaj)"
+
+        if len(text) > 300:
+            text = text[:300] + "..."
+
+        return replied.author.display_name, text
+
+    # --------------------------------------------------
+
     async def process_text(self, message):
 
         prompt = self.clean_prompt(message)
@@ -740,10 +774,18 @@ class HerbokologBot(commands.Bot):
             [u.display_name for u in extraction_targets],
         )
 
+        reply_ctx = await self.get_reply_context(message)
+
+        # Gecmiste "kim kime soyledi" karismasin diye, reply ise
+        # mesajin basina kime cevap verdigi etiketi eklenir.
+        history_prompt = (
+            f"(→ {reply_ctx[0]}) {prompt}" if reply_ctx else prompt
+        )
+
         self.memory.add(
             message.channel.id,
             message.author.display_name,
-            prompt,
+            history_prompt,
         )
 
         # Kendi-hakkinda VE (varsa, guvenilir kullaniciysa) etiketlenen
@@ -957,18 +999,40 @@ class HerbokologBot(commands.Bot):
                 {
                     "role": "system",
                     "content": (
-                        "Son konuşmalar:\n" + history
+                        "Son konuşmalar (satır başındaki '(→ Ad)' "
+                        "etiketi o mesajın KİME söylendiğini gösterir; "
+                        "bu etiketi kendi cevabında ASLA yazma):\n"
+                        + history
                         + "\n\nŞU AN SANA YAZAN KİŞİ: "
                         + message.author.display_name
-                        + ". Yukarıdaki konuşmalarda başka biri "
-                        "kendisiyle ilgili bir şey söylediyse (sınavı "
-                        "var, hasta, planı var, moral durumu vb.) bu "
-                        "O KİŞİYE aittir. "
+                        + ". Cevabını SADECE onun bu mesajına ver. "
+                        "Geçmişteki her kişiyle olan konuşma ayrı bir "
+                        "konuşmadır: başkasının söylediği/yaptığı bir "
+                        "şeyi (hakaret, teklif, ceza/mute, sınav, plan, "
+                        "ruh hali vb.) "
                         + message.author.display_name
-                        + " bunu kendisi söylemediyse ona 'senin "
-                        "sınavın var' gibi sahiplenerek söyleme. "
-                        "Başkasının durumundan sadece o kişi hakkında "
-                        "konuşuluyor/soruluyorsa, onun adıyla bahset."
+                        + " söylemiş/yapmış gibi aktarma, onun "
+                        "mesajıyla ilgisi yoksa başkasıyla olan "
+                        "konuşmayı cevabına karıştırma. Kimin ne "
+                        "dediğinden emin değilsen o kişiyi belirtmeden "
+                        "iddia etme. Başka biri hakkında konuşuluyor "
+                        "ya da soruluyorsa onu adıyla an. Önceki "
+                        "cevaplarındaki hitaplar sadece etiketteki "
+                        "kişiye söylenmişti."
+                    ),
+                }
+            )
+
+        if reply_ctx:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        f"{message.author.display_name} şu mesaja "
+                        f"CEVAP (reply) veriyor — {reply_ctx[0]}: "
+                        f"\"{reply_ctx[1]}\". Cevabın bu mesajla ve "
+                        f"{message.author.display_name}'in yazdığıyla "
+                        "ilgili olmalı."
                     ),
                 }
             )
@@ -985,7 +1049,7 @@ class HerbokologBot(commands.Bot):
         self.memory.add(
             message.channel.id,
             "Herbokolog",
-            response,
+            f"(→ {message.author.display_name}) {response}",
         )
 
         self.profile.add_history(
